@@ -4,7 +4,7 @@ import pygame
 # Game File
 from lost_in_time.level import Level
 from lost_in_time.player import Player
-#from lost_in_time.title import Title
+from lost_in_time.title import Title
 
 class Game:
     fps = 60
@@ -18,8 +18,9 @@ class Game:
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
         self.level = Level(1, self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.PADDING, self.HUD_H)
         self.player = Player(self.level.spawn.x, self.level.spawn.y)
+        self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
         #self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
-        self.state = "play"
+        self.state = "title"
 
     def _apply_bounds_player(self) -> None:
         # week2 example code to keep player within playfield
@@ -42,23 +43,31 @@ class Game:
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
         
+        # handle 'title' state events like button clicks
+        if self.state == "title":
+            self.title.handle_event(event)
+        
         # handle 'play' state events
         if self.state == "play":
-            self.player.event(event)
+            self.player.handle_event(event)
             
 
     def update(self, dt: float) -> None:
-        #if self.state == "title":
-            #if self.title.play_button.clicked:
-                #self.state = "play"
+        if self.state == "title":
+            # check to see if play button click to transition from title to play
+            if self.title.play_button.clicked:
+                self.state = "play"
         if self.state == "play":
+            # player movement + boundaries
             self.player.update(dt)
             self._apply_bounds_player()
 
     def draw(self) -> None:
         if self.state == "title":
+            # draw title screen
             self.title.draw(self.screen)
         elif self.state == "play":
+            # play screen with level layouts and player starting positions
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
             self.player.draw(self.screen)

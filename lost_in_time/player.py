@@ -22,7 +22,7 @@ class Player:
         self.on_ground = True
         
 
-    def event(self, event: pygame.event.Event) -> None:
+    def handle_event(self, event: pygame.event.Event) -> None:
         # Cannot hold down key to jump repeatedly
         if event.type == pygame.KEYDOWN:
             if event.key in {pygame.K_w, pygame.K_UP} and self.on_ground:
