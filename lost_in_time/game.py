@@ -6,6 +6,18 @@ from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.title import Title
 
+# controls for p1 and p2 defined to be passed to player class
+CONTROLS_PLAYER1 = {
+    "left": pygame.K_a,
+    "right": pygame.K_d,
+    "jump": pygame.K_w
+}
+CONTROLS_PLAYER2 = {
+    "left": pygame.K_LEFT,
+    "right": pygame.K_RIGHT,
+    "jump": pygame.K_UP
+}
+
 class Game:
     fps = 60
     SCREEN_WIDTH = 1920
@@ -17,26 +29,34 @@ class Game:
     def __init__(self) -> None:
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
         self.level = Level(1, self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.PADDING, self.HUD_H)
-        self.player = Player(self.level.spawn.x, self.level.spawn.y)
         self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
         #self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
         self.state = "title"
 
-    def _apply_bounds_player(self) -> None:
+        # player starting positions defined to be passed to player class
+        self.players = [
+            Player(self.level.spawn.x, self.level.spawn.y, CONTROLS_PLAYER1),
+            Player(self.level.spawn.x + 40, self.level.spawn.y, CONTROLS_PLAYER2)
+        ]
+        # player colors defined to be different for p1 and p2
+        self.players[0].color = pygame.Color("#FF0000")
+        self.players[1].color = pygame.Color("#0000FF")
+
+    def _apply_bounds_player(self, player: Player) -> None:
         # week2 example code to keep player within playfield
-        self.player.rect.clamp_ip(self.level.playfield)
+        player.rect.clamp_ip(self.level.playfield)
 
         # Claude debug for moving left even without touching left
         # Clamp_ip is clamping rect, essentially pulling the pos to the clamp
         # causing the "drift"
-        self.player.pos.x = max(self.level.playfield.left, min(self.level.playfield.right, self.player.pos.x))
-        self.player.pos.y = max(self.level.playfield.top, min(self.level.playfield.bottom, self.player.pos.y))
+        player.pos.x = max(self.level.playfield.left, min(self.level.playfield.right, player.pos.x))
+        player.pos.y = max(self.level.playfield.top, min(self.level.playfield.bottom, player.pos.y))
 
         # Checks player rect y value to see if player is on ground, when jump y value decreases causes if statement
         # to be invalid
-        if self.player.rect.bottom >= self.level.playfield.bottom:
-            self.player.on_ground = True
-            self.player.velocity.y = 0
+        if player.rect.bottom >= self.level.playfield.bottom:
+            player.on_ground = True
+            player.velocity.y = 0
         
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
@@ -49,7 +69,8 @@ class Game:
         
         # handle 'play' state events
         if self.state == "play":
-            self.player.handle_event(event)
+            for player in self.players:
+                player.handle_event(event)
             
 
     def update(self, dt: float) -> None:
@@ -59,8 +80,9 @@ class Game:
                 self.state = "play"
         if self.state == "play":
             # player movement + boundaries
-            self.player.update(dt)
-            self._apply_bounds_player()
+            for player in self.players:
+                player.update(dt)
+                self._apply_bounds_player(player)
 
     def draw(self) -> None:
         if self.state == "title":
@@ -70,4 +92,5 @@ class Game:
             # play screen with level layouts and player starting positions
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
-            self.player.draw(self.screen)
+            for player in self.players:
+                player.draw(self.screen)
