@@ -5,6 +5,7 @@ import pygame
 from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.title import Title
+from lost_in_time.collectible import Collectible
 
 # controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
@@ -83,6 +84,11 @@ class Game:
             for player in self.players:
                 player.update(dt)
                 self._apply_bounds_player(player)
+        # check for player collision with collectibles
+                for collectible in self.level.collectibles:
+                    if collectible.active and player.rect.colliderect(collectible.rect):
+                        collectible.active = False
+                        player.apply_jump_boost()
 
     def draw(self) -> None:
         if self.state == "title":
