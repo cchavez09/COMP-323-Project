@@ -1,5 +1,8 @@
 import pygame
 
+# import collectible
+from lost_in_time.collectible import Collectible
+
 # Level infromation stored here for game.py use
 class Level:
     def __init__(self, level_number: int, screen_w: int, screen_h: int, padding: int, hud_h: int) -> None:
@@ -18,6 +21,10 @@ class Level:
         self.level_number = level_number
         self.walls = []
         self.spawn = pygame.Vector2(0,0)
+        # collectible added to ground in center of playfield for test
+        self.collectibles = [
+            Collectible(self.playfield.centerx, self.playfield.bottom - 10)
+        ]
 
         if self.level_number == 1:
             self.spawn = pygame.Vector2(self.padding + 20, self.screen_h - self.padding - 20)
@@ -33,6 +40,8 @@ class Level:
         pygame.draw.rect(screen, pygame.Color("#8FBFFD"), hud_rect)
         pygame.draw.rect(screen, pygame.Color("#868686"), self.playfield) 
 
-       
         for wall in self.walls:
             pygame.draw.rect(screen, pygame.Color("#A9E9E6"), wall)
+
+        for collectible in self.collectibles:
+            collectible.draw(screen)
