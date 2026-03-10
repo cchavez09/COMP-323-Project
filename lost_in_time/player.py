@@ -11,7 +11,7 @@ class Player:
     GRAVITY = 2200.0
     JUMP_SPEED = 820.0
 
-    def __init__(self, x: int, y: int) -> None:
+    def __init__(self, x: int, y: int, controls: dict) -> None:
         self.rect = pygame.Rect(0, 0, self.SIZE, self.SIZE)
         self.pos = pygame.Vector2(x, y)
         self.velocity = pygame.Vector2(0, 0)
@@ -20,21 +20,22 @@ class Player:
 
         self.jump_requested = False
         self.on_ground = True
+        # controls passed from game.py to be used in player class for movement
+        self.controls = controls
         
 
     def handle_event(self, event: pygame.event.Event) -> None:
         # Cannot hold down key to jump repeatedly
         if event.type == pygame.KEYDOWN:
-            if event.key in {pygame.K_w, pygame.K_UP} and self.on_ground:
-                if self.on_ground:
-                    self.jump_requested = True
+            if event.key == self.controls["jump"] and self.on_ground:
+                self.jump_requested = True
 
     def _read_horizontal(self) -> float:
         keys = pygame.key.get_pressed()
         x = 0
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        if keys[self.controls["left"]]:
             x -= 1
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        if keys[self.controls["right"]]:
             x += 1
         return float(x)
 
@@ -60,4 +61,4 @@ class Player:
         self.rect.center = (int(self.pos.x), int(self.pos.y))
     
     def draw(self, screen: pygame.Surface) -> None:
-        pygame.draw.rect(screen, pygame.Color("#FF0000"), self.rect)
+        pygame.draw.rect(screen, self.color, self.rect)
