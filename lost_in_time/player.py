@@ -29,6 +29,10 @@ class Player:
         if event.type == pygame.KEYDOWN:
             if event.key == self.controls["jump"] and self.on_ground:
                 self.jump_requested = True
+    
+    # apply the jumping boost collectible
+    def apply_jump_boost(self) -> None:
+        self.JUMP_SPEED = 1200.0
 
     def _read_horizontal(self) -> float:
         keys = pygame.key.get_pressed()
