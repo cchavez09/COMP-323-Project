@@ -36,8 +36,8 @@ class Game:
 
         # player starting positions defined to be passed to player class
         self.players = [
-            Player(self.level.spawn.x, self.level.spawn.y, CONTROLS_PLAYER1),
-            Player(self.level.spawn.x + 40, self.level.spawn.y, CONTROLS_PLAYER2)
+            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
+            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
         ]
         # player colors defined to be different for p1 and p2
         self.players[0].color = pygame.Color("#FF0000")
@@ -58,11 +58,24 @@ class Game:
         if player.rect.bottom >= self.level.playfield.bottom:
             player.on_ground = True
             player.velocity.y = 0
+    
+    # restart function to reset player position and collectibles without having to quit game, called in handle_event when 'r' key is pressed
+    def _restart(self) -> None:
+        self.level = Level(1, self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.PADDING, self.HUD_H)
+        self.players = [
+            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
+            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
+        ]
+        self.players[0].color = pygame.Color("#FF0000")
+        self.players[1].color = pygame.Color("#0000FF")
         
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
+            # adding restart functionality to reset player position and collectibles without having to quit game
+            if event.key == pygame.K_r and self.state == "play":
+                self._restart()
         
         # handle 'title' state events like button clicks
         if self.state == "title":
@@ -84,7 +97,7 @@ class Game:
             for player in self.players:
                 player.update(dt)
                 self._apply_bounds_player(player)
-        # check for player collision with collectibles
+                # check for player collision with collectibles
                 for collectible in self.level.collectibles:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.active = False
