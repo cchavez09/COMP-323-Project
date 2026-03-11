@@ -3,6 +3,7 @@ import pygame
 class Collectible:
     RADIUS = 10
 
+    # initializes collectible pos and rect for collision detection, active to check if collected
     def __init__(self, x: int, y: int) -> None:
         self.pos = pygame.Vector2(x, y)
         self.rect = pygame.Rect(0, 0, self.RADIUS * 2, self.RADIUS * 2)
