@@ -4,7 +4,7 @@ import pygame
 # Game File
 from lost_in_time.level import Level
 from lost_in_time.player import Player
-from lost_in_time.title import Title
+from lost_in_time.menu import Menu
 from lost_in_time.collectible import Collectible
 
 # controls for p1 and p2 defined to be passed to player class
@@ -19,20 +19,24 @@ CONTROLS_PLAYER2 = {
     "jump": pygame.K_UP
 }
 
+FPS = 60
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+PADDING = 50
+HUD_H = 100
+
 class Game:
-    fps = 60
-    SCREEN_WIDTH = 1920
-    SCREEN_HEIGHT = 1080
-    PADDING = 50
-    HUD_H = 100
-    
 
     def __init__(self) -> None:
-        self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
-        self.level = Level(1, self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.PADDING, self.HUD_H)
-        self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
-        #self.title = Title(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
-        self.state = "title"
+        self.fps = FPS
+
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
+        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title")
+        self.state = "title_menu"
+
+        # Keep track of menus for back button implementation
+        self.menu_track = [] 
 
         # player starting positions defined to be passed to player class
         self.players = [
@@ -61,7 +65,7 @@ class Game:
     
     # restart function to reset player position and collectibles without having to quit game, called in handle_event when 'r' key is pressed
     def _restart(self) -> None:
-        self.level = Level(1, self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.PADDING, self.HUD_H)
+        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
             Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
             Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
@@ -77,9 +81,9 @@ class Game:
             if event.key == pygame.K_r and self.state == "play":
                 self._restart()
         
-        # handle 'title' state events like button clicks
-        if self.state == "title":
-            self.title.handle_event(event)
+        # handle 'title_menu' state events like button clicks
+        if self.state == "title_menu":
+            self.menu.handle_event(event)
         
         # handle 'play' state events
         if self.state == "play":
@@ -88,10 +92,27 @@ class Game:
             
 
     def update(self, dt: float) -> None:
-        if self.state == "title":
-            # check to see if play button click to transition from title to play
-            if self.title.play_button.clicked:
-                self.state = "play"
+        if self.state == "title_menu":
+            # check if menu has next screen
+            if self.menu.next_screen:
+                # check to see if the next screen comes from level select to transition 
+                # game state
+                if self.menu.next_screen == "game":
+                    self.state = "play"
+
+                # check if back button was clicked and pop menu from menu track stack and 
+                # go to previous menu
+                elif self.menu.next_screen == "back":
+                    if self.menu_track:
+                        previous = self.menu_track.pop()
+                        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, previous)
+
+                # add current menu to stack to keep track of menu navigation order and
+                # go to next menu
+                else:
+                    self.menu_track.append(self.menu.menu)
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, self.menu.next_screen)
+
         if self.state == "play":
             # player movement + boundaries
             for player in self.players:
@@ -104,9 +125,9 @@ class Game:
                         player.apply_jump_boost()
 
     def draw(self) -> None:
-        if self.state == "title":
+        if self.state == "title_menu":
             # draw title screen
-            self.title.draw(self.screen)
+            self.menu.draw(self.screen)
         elif self.state == "play":
             # play screen with level layouts and player starting positions
             self.screen.fill(pygame.Color("#474747"))
