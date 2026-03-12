@@ -25,9 +25,11 @@ class Player:
         
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Cannot hold down key to jump repeatedly
+        # Record the request on keydown; update() will only fire it if on_ground is True.
+        # Removing the on_ground guard here prevents missed inputs when on_ground is
+        # briefly False due to collision timing on the same frame the key is pressed.
         if event.type == pygame.KEYDOWN:
-            if event.key == self.controls["jump"] and self.on_ground:
+            if event.key == self.controls["jump"]:
                 self.jump_requested = True
     
     # apply the jumping boost collectible

@@ -1,14 +1,12 @@
 import pygame
 
-# Import files from the lost_in_time package for communcation between classes within
-# Game File
 from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.menu import Menu
 from lost_in_time.collectible import Collectible
 from lost_in_time.hazard import Hazard
 
-# controls for p1 and p2 defined to be passed to player class
+# Controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
     "left": pygame.K_a,
     "right": pygame.K_d,
@@ -37,34 +35,67 @@ class Game:
         self.state = "title_menu"
 
         # Keep track of menus for back button implementation
-        self.menu_track = [] 
+        self.menu_track = []
 
-        # player starting positions defined to be passed to player class
+        # Player 1 starts left, player 2 starts right (inside the cage in level 1)
         self.players = [
             Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
             Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
         ]
-        # player colors defined to be different for p1 and p2
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
 
     def _apply_bounds_player(self, player: Player) -> None:
-        # week2 example code to keep player within playfield
         player.rect.clamp_ip(self.level.playfield)
 
-        # Claude debug for moving left even without touching left
-        # Clamp_ip is clamping rect, essentially pulling the pos to the clamp
-        # causing the "drift"
         player.pos.x = max(self.level.playfield.left, min(self.level.playfield.right, player.pos.x))
         player.pos.y = max(self.level.playfield.top, min(self.level.playfield.bottom, player.pos.y))
 
-        # Checks player rect y value to see if player is on ground, when jump y value decreases causes if statement
-        # to be invalid
         if player.rect.bottom >= self.level.playfield.bottom:
             player.on_ground = True
             player.velocity.y = 0
-    
-    # restart function to reset player position and collectibles without having to quit game, called in handle_event when 'r' key is pressed
+
+    def _apply_wall_collisions(self, player: Player) -> None:
+        # Combine static walls and currently-active movable walls
+        all_walls = list(self.level.walls) + [
+            mw.rect for mw in self.level.movable_walls if mw.active
+        ]
+        for wall in all_walls:
+            if not player.rect.colliderect(wall):
+                continue
+
+            # Minimum-overlap resolution: push the player out the shortest axis
+            overlap_left   = player.rect.right  - wall.left
+            overlap_right  = wall.right  - player.rect.left
+            overlap_top    = player.rect.bottom  - wall.top
+            overlap_bottom = wall.bottom - player.rect.top
+
+            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+            if min_overlap == overlap_top:
+                # Player landed on top of wall
+                player.rect.bottom = wall.top
+                player.pos.y = player.rect.centery
+                player.velocity.y = 0
+                player.on_ground = True
+            elif min_overlap == overlap_bottom:
+                # Player hit ceiling
+                player.rect.top = wall.bottom
+                player.pos.y = player.rect.centery
+                if player.velocity.y < 0:
+                    player.velocity.y = 0
+            elif min_overlap == overlap_left:
+                # Player hit right face of wall
+                player.rect.right = wall.left
+                player.pos.x = player.rect.centerx
+                player.velocity.x = 0
+            else:
+                # Player hit left face of wall
+                player.rect.left = wall.right
+                player.pos.x = player.rect.centerx
+                player.velocity.x = 0
+
+    # Restart resets the level and both players without quitting
     def _restart(self) -> None:
         self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
@@ -73,71 +104,76 @@ class Game:
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
-        
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
-            # adding restart functionality to reset player position and collectibles without having to quit game
-            if event.key == pygame.K_r and self.state == "play":
+            if event.key == pygame.K_r and self.state in ("play", "level_complete"):
                 self._restart()
-        
-        # handle 'title_menu' state events like button clicks
+                self.state = "play"
+
         if self.state == "title_menu":
             self.menu.handle_event(event)
-        
-        # handle 'play' state events
+
         if self.state == "play":
             for player in self.players:
                 player.handle_event(event)
-            
+            # Forward interact keypresses to levers
+            for lever in self.level.levers:
+                lever.handle_event(event, self.players)
 
     def update(self, dt: float) -> None:
         if self.state == "title_menu":
-            # check if menu has next screen
             if self.menu.next_screen:
-                # check to see if the next screen comes from level select to transition 
-                # game state
                 if self.menu.next_screen == "game":
                     self.state = "play"
-
-                # check if back button was clicked and pop menu from menu track stack and 
-                # go to previous menu
                 elif self.menu.next_screen == "back":
                     if self.menu_track:
                         previous = self.menu_track.pop()
                         self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, previous)
-
-                # add current menu to stack to keep track of menu navigation order and
-                # go to next menu
                 else:
                     self.menu_track.append(self.menu.menu)
                     self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, self.menu.next_screen)
 
         if self.state == "play":
-            # player movement + boundaries
             for player in self.players:
                 player.update(dt)
+                # Reset on_ground after update so the jump check inside update still sees
+                # the previous frame's value; collision detection restores it if needed
+                player.on_ground = False
+                self._apply_wall_collisions(player)
                 self._apply_bounds_player(player)
-                # check for player collision with collectibles
+
                 for collectible in self.level.collectibles:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.active = False
                         player.apply_jump_boost()
-                # check for player collision with hazards and if player collides with hazard, set health to 0 to remove player from game
+
                 for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
                     player.health = 0
-            
-            # remove players with 0 health from game
+
+            for lever in self.level.levers:
+                lever.update(dt)
+
+            if self.level.exit_door:
+                self.level.exit_door.update(self.players)
+                if self.level.exit_door.completed:
+                    self.state = "level_complete"
+
             self.players = [p for p in self.players if p.health > 0]
 
     def draw(self) -> None:
         if self.state == "title_menu":
-            # draw title screen
             self.menu.draw(self.screen)
-        elif self.state == "play":
-            # play screen with level layouts and player starting positions
+
+        elif self.state in ("play", "level_complete"):
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
             for player in self.players:
                 player.draw(self.screen)
+
+            if self.state == "level_complete":
+                font = pygame.font.SysFont("Arial", 72, True)
+                msg = font.render("Level Complete!  Press R to play again", True, pygame.Color("#FFD700"))
+                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
