@@ -19,7 +19,7 @@ class Menu:
             self.buttons.append(Button("Play", (self.screen_width // 2, 500), 180, 100, "#8DF78DFF"))
         elif self.menu == "game_mode":
             self.buttons.append(Button("Local", (self.screen_width // 2 - 300, 600), 220, 100, self.background_color))
-            self.buttons.append(Button("Multiplayer", (self.screen_width // 2 + 320, 600), 450, 100, self.background_color))
+            self.buttons.append(Button("Multiplayer", (self.screen_width // 2 + 400, 600), 450, 100, self.background_color))
             self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
         elif self.menu == "level_select":
             self.buttons.append(Button("1", (self.screen_width // 2 - 300, 600), 220, 100, self.background_color))
