@@ -6,6 +6,7 @@ from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.menu import Menu
 from lost_in_time.collectible import Collectible
+from lost_in_time.hazard import Hazard
 
 # controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
@@ -123,6 +124,12 @@ class Game:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.active = False
                         player.apply_jump_boost()
+                # check for player collision with hazards and if player collides with hazard, set health to 0 to remove player from game
+                for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
+                    player.health = 0
+            
+            # remove players with 0 health from game
+            self.players = [p for p in self.players if p.health > 0]
 
     def draw(self) -> None:
         if self.state == "title_menu":
