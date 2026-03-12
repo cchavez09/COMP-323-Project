@@ -6,6 +6,7 @@ from lost_in_time.menu import Menu
 from lost_in_time.button import Button
 from lost_in_time.collectible import Collectible
 from lost_in_time.hazard import Hazard
+from lost_in_time.hud import HUD
 
 # Controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
@@ -52,6 +53,8 @@ class Game:
             (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80),
             400, 100, "#8DF78DFF"
         )
+
+        self.hud = HUD(SCREEN_WIDTH, HUD_H)
 
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
@@ -124,6 +127,8 @@ class Game:
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
 
+        self.hud.reset()
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
@@ -177,6 +182,7 @@ class Game:
                 for collectible in self.level.collectibles:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.active = False
+                        self.hud.notify_collected()
 
                 for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
                     self.state = "game_over"
@@ -191,6 +197,8 @@ class Game:
                 self.level.exit_door.update(self.players)
                 if self.level.exit_door.completed:
                     self.state = "level_complete"
+            
+            self.hud.update(dt)
 
             self.players = [p for p in self.players if p.health > 0]
 
@@ -201,6 +209,7 @@ class Game:
         elif self.state in ("play", "level_complete", "game_over"):
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
+            self.hud.draw(self.screen)
             for player in self.players:
                 player.draw(self.screen)
 
