@@ -3,6 +3,7 @@ import pygame
 from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.menu import Menu
+from lost_in_time.button import Button
 from lost_in_time.collectible import Collectible
 from lost_in_time.hazard import Hazard
 
@@ -30,7 +31,8 @@ class Game:
         self.fps = FPS
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
+        self.current_level = 1
+        self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title")
         self.state = "title_menu"
 
@@ -44,6 +46,12 @@ class Game:
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
+
+        self.level_select_button = Button(
+            "Level Select",
+            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80),
+            400, 100, "#8DF78DFF"
+        )
 
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
@@ -95,9 +103,20 @@ class Game:
                 player.pos.x = player.rect.centerx
                 player.velocity.x = 0
 
+        # Ground probe: pygame's colliderect returns False when rects only touch
+        # (share an edge without overlapping), so after resolution the player sits
+        # at exactly rect.bottom == wall.top and colliderect misses it next frame.
+        # A 1 px downward probe catches this and keeps on_ground reliable.
+        if not player.on_ground and player.velocity.y >= 0:
+            probe = player.rect.move(0, 1)
+            for wall in all_walls:
+                if probe.colliderect(wall):
+                    player.on_ground = True
+                    break
+
     # Restart resets the level and both players without quitting
     def _restart(self) -> None:
-        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
+        self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
             Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
             Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
@@ -109,12 +128,20 @@ class Game:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
-            if event.key == pygame.K_r and self.state in ("play", "level_complete"):
+            if event.key == pygame.K_r and self.state in ("play", "level_complete", "game_over"):
                 self._restart()
                 self.state = "play"
 
         if self.state == "title_menu":
             self.menu.handle_event(event)
+
+        if self.state == "level_complete":
+            self.level_select_button.handle_event(event)
+            if self.level_select_button.clicked:
+                self.level_select_button.clicked = False
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+                self.menu_track = ["title"]
+                self.state = "title_menu"
 
         if self.state == "play":
             for player in self.players:
@@ -126,7 +153,9 @@ class Game:
     def update(self, dt: float) -> None:
         if self.state == "title_menu":
             if self.menu.next_screen:
-                if self.menu.next_screen == "game":
+                if self.menu.next_screen in ("game", "game2"):
+                    self.current_level = 2 if self.menu.next_screen == "game2" else 1
+                    self._restart()
                     self.state = "play"
                 elif self.menu.next_screen == "back":
                     if self.menu_track:
@@ -148,13 +177,15 @@ class Game:
                 for collectible in self.level.collectibles:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.active = False
-                        player.apply_jump_boost()
 
                 for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
-                    player.health = 0
+                    self.state = "game_over"
 
             for lever in self.level.levers:
                 lever.update(dt)
+
+            for btn in self.level.pressure_buttons:
+                btn.update(self.players)
 
             if self.level.exit_door:
                 self.level.exit_door.update(self.players)
@@ -167,7 +198,7 @@ class Game:
         if self.state == "title_menu":
             self.menu.draw(self.screen)
 
-        elif self.state in ("play", "level_complete"):
+        elif self.state in ("play", "level_complete", "game_over"):
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
             for player in self.players:
@@ -175,5 +206,11 @@ class Game:
 
             if self.state == "level_complete":
                 font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("Level Complete!  Press R to play again", True, pygame.Color("#FFD700"))
+                msg = font.render("Level Complete!", True, pygame.Color("#FFD700"))
+                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+                self.level_select_button.draw(self.screen)
+
+            elif self.state == "game_over":
+                font = pygame.font.SysFont("Arial", 72, True)
+                msg = font.render("You died!  Press R to restart", True, pygame.Color("#FF4444"))
                 self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))

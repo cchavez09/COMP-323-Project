@@ -4,6 +4,7 @@ from lost_in_time.collectible import Collectible
 from lost_in_time.hazard import Hazard
 from lost_in_time.lever import Lever, MovableWall
 from lost_in_time.exit_door import ExitDoor
+from lost_in_time.pressure_button import PressureButton
 
 # Level information stored here for game.py use
 class Level:
@@ -26,6 +27,7 @@ class Level:
         self.hazards = pygame.sprite.Group()
         self.collectibles = []
         self.levers = []
+        self.pressure_buttons = []
         self.exit_door = None
 
         if self.level_number == 1:
@@ -65,6 +67,23 @@ class Level:
             pygame.Rect(1100, 920, 250, 20),
         ]
 
+        # --- Hazard under the right cage platform (x=1100–1350, ground level) ---
+        # 6 upward spikes spanning x=1115–1295, sitting on the ground at y=1000
+        hz = Hazard(
+            (1115, pf.bottom - 30),
+            color=pygame.Color("#bf616a"),
+            count=6,
+            spike_w=30,
+            spike_h=30,
+            direction="up",
+        )
+        self.hazards.add(hz)
+
+        # --- Collectible on top of Step 1 (center of platform) ---
+        self.collectibles = [
+            Collectible(175, 910)   # radius=10, so center sits 10 px above y=920 surface
+        ]
+
         # --- Lever (player 1 activates it to open the mid-wall and free player 2) ---
         # Sits on the left end of the top platform; interact with E (P1) or / (P2)
         self.levers = [
@@ -87,6 +106,9 @@ class Level:
 
         for lever in self.levers:
             lever.draw(screen)
+
+        for btn in self.pressure_buttons:
+            btn.draw(screen)
 
         if self.exit_door:
             self.exit_door.draw(screen)
