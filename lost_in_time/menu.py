@@ -18,8 +18,8 @@ class Menu:
         if self.menu == "title":
             self.buttons.append(Button("Play", (self.screen_width // 2, 500), 180, 100, "#8DF78DFF"))
         elif self.menu == "game_mode":
-            self.buttons.append(Button("Local", (self.screen_width // 2 - 300, 600), 220, 100, self.background_color))
-            self.buttons.append(Button("Multiplayer", (self.screen_width // 2 + 400, 600), 450, 100, self.background_color))
+            self.buttons.append(Button("Local", (self.screen_width // 2, 550), 220, 100, self.background_color))
+            self.buttons.append(Button("Multiplayer", (self.screen_width // 2, 675), 450, 100, self.background_color))
             self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
         elif self.menu == "level_select":
             self.buttons.append(Button("1", (self.screen_width // 2 - 300, 600), 220, 100, self.background_color))
@@ -27,6 +27,11 @@ class Menu:
             self.buttons.append(Button("3", (self.screen_width // 2, 600), 220, 100, self.background_color))
             self.buttons.append(Button("4", (self.screen_width // 2 + 150, 600), 220, 100, self.background_color))
             self.buttons.append(Button("5", (self.screen_width // 2 + 300, 600), 220, 100, self.background_color))
+            self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
+        # Multiplayer buttons
+        elif self.menu == "multiplayer":
+            self.buttons.append(Button("Host", (self.screen_width // 2 - 150, 600), 220, 100, self.background_color))
+            self.buttons.append(Button("Join", (self.screen_width // 2 + 150, 600), 220, 100, self.background_color))
             self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
 
     # event in relation to button click
@@ -46,7 +51,12 @@ class Menu:
                     self.next_screen = "game"
                 if button.text == "2":
                     self.next_screen = "game2"
-                    
+                if button.text == "Multiplayer":
+                    self.next_screen = "multiplayer"
+                if button.text == "Host":
+                    self.next_screen = "host"
+                if button.text == "Join":
+                    self.next_screen = "join"
     # draw background 
     def draw(self, screen: pygame.Surface) -> None:
         # Draw menu design while also drawing buttons for their respective menu
@@ -61,6 +71,9 @@ class Menu:
         elif self.menu == "level_select":
             level_select_text = self.header_font.render("Choose Level", True, pygame.Color("#000000"))
             screen.blit(level_select_text, (level_select_text.get_rect(center = (self.screen_width // 2, 350))))
+        elif self.menu == "multiplayer":
+            multiplayer_text = self.header_font.render("Multiplayer", True, pygame.Color("#000000"))
+            screen.blit(multiplayer_text, (multiplayer_text.get_rect(center = (self.screen_width // 2, 350))))
 
         for button in self.buttons:
             button.draw(screen)

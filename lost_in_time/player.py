@@ -45,8 +45,14 @@ class Player:
             x += 1
         return float(x)
 
-    def update(self, dt: float) -> None:
-        x = self._read_horizontal()
+    # override input for server authoritatve movement in multiplayer
+    def update(self, dt: float, input_override: dict = None) -> None:
+        if input_override is not None:
+            x = float(input_override.get("x", 0))
+            if input_override.get("jump"):
+                self.jump_requested = True
+        else:
+            x = self._read_horizontal()
 
         # Horizontal accel; no vertical input (gravity handles Y).
         self.velocity.x += x * self.ACCEL * dt
