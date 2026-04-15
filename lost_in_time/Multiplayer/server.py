@@ -17,6 +17,7 @@ SCREEN_HEIGHT = 1080
 PADDING = 50
 HUD_H = 100
 
+
 class Server:
     def __init__(self):
         self.ip = socket.gethostbyname(socket.gethostname())
