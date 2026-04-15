@@ -200,7 +200,7 @@ class Game:
             
             self.hud.update(dt)
 
-            self.players = [p for p in self.players if p.health > 0]
+            self.players = [p for p in self.players if p.health > 0] 
 
     def draw(self) -> None:
         if self.state == "title_menu":
