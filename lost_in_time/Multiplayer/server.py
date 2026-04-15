@@ -92,8 +92,8 @@ class Server:
     def _restart(self) -> None:
         self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.bodies = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, self.dummy),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, self.dummy)
+            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, self.temp),
+            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, self.temp)
         ]
         self.bodies[0].color = pygame.Color("#FF0000")
         self.bodies[1].color = pygame.Color("#0000FF")
