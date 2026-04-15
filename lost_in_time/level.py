@@ -72,7 +72,7 @@ class Level:
         hz = Hazard(
             (1115, pf.bottom - 30),
             color=pygame.Color("#bf616a"),
-            count=6,
+            count=8,
             spike_w=30,
             spike_h=30,
             direction="up",
