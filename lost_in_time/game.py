@@ -27,12 +27,17 @@ SCREEN_HEIGHT = 1080
 PADDING = 50
 HUD_H = 100
 
+_SHAKE_TRAUMA = 0.5        
+_SHAKE_DECAY = 0.8        
+_SHAKE_MAX_OFFSET = 20 
+
 class Game:
 
     def __init__(self) -> None:
         self.fps = FPS
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self._render_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.current_level = 1
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title")
@@ -59,6 +64,20 @@ class Game:
 
         self.pause_menu = PauseMenu(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.paused = False
+
+        self._shake_trauma = 0.0 
+
+    def _add_trauma(self, amount: float) -> None:
+        self._shake_trauma = min(1.0, self._shake_trauma + amount)
+
+    def _shake_offset(self) -> tuple[int, int]:
+        if self._shake_trauma <= 0:
+            return (0, 0)
+        shake = self._shake_trauma ** 2
+        import random
+        dx = int(random.uniform(-1, 1) * _SHAKE_MAX_OFFSET * shake)
+        dy = int(random.uniform(-1, 1) * _SHAKE_MAX_OFFSET * shake)
+        return (dx, dy)
 
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
@@ -132,6 +151,7 @@ class Game:
         self.players[1].color = pygame.Color("#0000FF")
 
         self.hud.reset()
+        self._shake_trauma = 0.0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
@@ -191,6 +211,9 @@ class Game:
         if self.paused:
             return
             
+        if self._shake_trauma > 0:
+            self._shake_trauma = max(0.0, self._shake_trauma - _SHAKE_DECAY * dt)
+
         if self.state == "title_menu":
             if self.menu.next_screen:
                 if self.menu.next_screen in ("game", "game2"):
@@ -216,11 +239,21 @@ class Game:
 
                 for collectible in self.level.collectibles:
                     if collectible.active and player.rect.colliderect(collectible.rect):
-                        collectible.active = False
+                        collectible.collect()          
                         self.hud.notify_collected()
 
+                if self.state == "play":
+                    for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
+                        self._add_trauma(_SHAKE_TRAUMA)
+                        self.state = "game_over"
+                        break
+
                 for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
+                    self._add_trauma(_SHAKE_TRAUMA)
                     self.state = "game_over"
+
+            for collectible in self.level.collectibles:
+                collectible.update(dt)
 
             for lever in self.level.levers:
                 lever.update(dt)
@@ -238,25 +271,31 @@ class Game:
             self.players = [p for p in self.players if p.health > 0] 
 
     def draw(self) -> None:
+        surf = self._render_surf
+ 
         if self.state == "title_menu":
-            self.menu.draw(self.screen)
-
+            self.menu.draw(surf)
         elif self.state in ("play", "level_complete", "game_over"):
-            self.screen.fill(pygame.Color("#474747"))
-            self.level.draw(self.screen)
-            self.hud.draw(self.screen, paused=self.paused)
+            surf.fill(pygame.Color("#474747"))
+            self.level.draw(surf)
+            self.hud.draw(surf, paused=self.paused)
             for player in self.players:
-                player.draw(self.screen)
+                player.draw(surf)
             if self.paused:
-                self.pause_menu.draw(self.screen)
-
+                self.pause_menu.draw(surf)
             if self.state == "level_complete":
                 font = pygame.font.SysFont("Arial", 72, True)
                 msg = font.render("Level Complete!", True, pygame.Color("#FFD700"))
-                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
-                self.level_select_button.draw(self.screen)
-
+                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2,
+                                SCREEN_HEIGHT // 2 - 36))
+                self.level_select_button.draw(surf)
             elif self.state == "game_over":
                 font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("You died!  Press R to restart", True, pygame.Color("#FF4444"))
-                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+                msg = font.render("You died! Press R to restart", True,
+                                  pygame.Color("#FF4444"))
+                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2,
+                                SCREEN_HEIGHT // 2 - 36))
+ 
+        dx, dy = self._shake_offset()
+        self.screen.fill(pygame.Color("#000000"))   
+        self.screen.blit(surf, (dx, dy))
