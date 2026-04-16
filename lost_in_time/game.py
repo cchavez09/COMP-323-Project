@@ -40,10 +40,10 @@ class Game:
         # Keep track of menus for back button implementation
         self.menu_track = []
 
-        # Player 1 starts left, player 2 starts right (inside the cage in level 1)
+        # Spawn positions come from the level so each level can place players anywhere
         self.players = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
@@ -121,8 +121,8 @@ class Game:
     def _restart(self) -> None:
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
