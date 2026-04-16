@@ -67,6 +67,16 @@ class Game:
 
         self._shake_trauma = 0.0 
 
+        # main music
+        pygame.mixer.init()
+        pygame.mixer.music.load("assets/music/menu_music.mp3")
+        pygame.mixer.music.play(-1)
+
+        # sound effect for collecting collectibles
+        self.collect_sound = pygame.mixer.Sound("assets/sounds/collect.mp3")
+        # sound effect for player death
+        self.death_sound = pygame.mixer.Sound("assets/sounds/death.mp3")
+
     def _add_trauma(self, amount: float) -> None:
         self._shake_trauma = min(1.0, self._shake_trauma + amount)
 
@@ -153,6 +163,8 @@ class Game:
         self.hud.reset()
         self._shake_trauma = 0.0
 
+        pygame.mixer.stop()
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             # pause menu toggle on ESC; also quit from title menu or level complete screen
@@ -173,6 +185,7 @@ class Game:
                 self.paused = False
             elif action == "level_select":
                 self.paused = False
+                pygame.mixer.music.play(-1)  # restart menu music
                 self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
                 self.menu_track = ["title"]
                 self.state = "title_menu"
@@ -190,6 +203,7 @@ class Game:
             self.level_select_button.handle_event(event)
             if self.level_select_button.clicked:
                 self.level_select_button.clicked = False
+                pygame.mixer.music.play(-1)  # restart menu music
                 self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
                 self.menu_track = ["title"]
                 self.state = "title_menu"
@@ -218,6 +232,7 @@ class Game:
             if self.menu.next_screen:
                 if self.menu.next_screen in ("game", "game2"):
                     self.current_level = 2 if self.menu.next_screen == "game2" else 1
+                    pygame.mixer.music.stop()  # stop menu music when game starts
                     self._restart()
                     self.state = "play"
                 elif self.menu.next_screen == "back":
@@ -241,16 +256,14 @@ class Game:
                     if collectible.active and player.rect.colliderect(collectible.rect):
                         collectible.collect()          
                         self.hud.notify_collected()
+                        self.collect_sound.play()
 
                 if self.state == "play":
                     for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
                         self._add_trauma(_SHAKE_TRAUMA)
+                        self.death_sound.play()
                         self.state = "game_over"
                         break
-
-                for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
-                    self._add_trauma(_SHAKE_TRAUMA)
-                    self.state = "game_over"
 
             for collectible in self.level.collectibles:
                 collectible.update(dt)
