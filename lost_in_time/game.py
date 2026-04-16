@@ -158,8 +158,9 @@ class Game:
     def update(self, dt: float) -> None:
         if self.state == "title_menu":
             if self.menu.next_screen:
-                if self.menu.next_screen in ("game", "game2"):
-                    self.current_level = 2 if self.menu.next_screen == "game2" else 1
+                _level_map = {"game": 1, "game2": 2, "game3": 3}
+                if self.menu.next_screen in _level_map:
+                    self.current_level = _level_map[self.menu.next_screen]
                     self._restart()
                     self.state = "play"
                 elif self.menu.next_screen == "back":
@@ -186,6 +187,8 @@ class Game:
 
                 for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
                     self.state = "game_over"
+
+            self.level.hazards.update(dt)
 
             for lever in self.level.levers:
                 lever.update(dt)

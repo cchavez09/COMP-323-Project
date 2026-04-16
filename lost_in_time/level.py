@@ -1,7 +1,7 @@
 import pygame
 
 from lost_in_time.collectible import Collectible
-from lost_in_time.hazard import Hazard
+from lost_in_time.hazard import Hazard, MovingHazard
 from lost_in_time.lever import Lever, MovableWall
 from lost_in_time.exit_door import ExitDoor
 from lost_in_time.pressure_button import PressureButton
@@ -38,6 +38,8 @@ class Level:
             self._build_level1()
         elif self.level_number == 2:
             self._build_level2()
+        elif self.level_number == 3:
+            self._build_level3()
 
     def _build_level1(self) -> None:
         pf = self.playfield
@@ -155,17 +157,12 @@ class Level:
         ]
 
         # --- Hazards ---
-        # Zone L ground — threatens P1 if they fall during the climb
+        # Full-width ground hazard — spikes across the entire bottom of the level
+        # 61 spikes × 30 px = 1830 px, starting at playfield left (x=50)
         self.hazards.add(Hazard(
-            (200, pf.bottom - 30),
+            (pf.left, pf.bottom - 30),
             color=pygame.Color("#bf616a"),
-            count=5, spike_w=30, spike_h=30, direction="up",
-        ))
-        # Zone R ground — threatens P2 below the bottom platform
-        self.hazards.add(Hazard(
-            (1450, pf.bottom - 30),
-            color=pygame.Color("#bf616a"),
-            count=5, spike_w=30, spike_h=30, direction="up",
+            count=61, spike_w=30, spike_h=30, direction="up",
         ))
         # Zone R Step 1 surface — spikes on the left end of Step 1 (y=560) punish
         # P2 for landing in the wrong spot when descending from P2 start
@@ -206,6 +203,130 @@ class Level:
         # P1 (entering from left) can reach it freely.
         # P2 (entering from right) must first step on the button to remove the gate.
         self.exit_door = ExitDoor(750, 880)
+
+    def _build_level3(self) -> None:
+        pf = self.playfield
+        # Playfield: left=50, top=150, right=1870, bottom=1030
+        # Max jump height ≈ 153 px
+        #
+        # ── The Colosseum ──────────────────────────────────────────────────────────
+        # Both players spawn on the ARENA FLOOR.  Tiered platforms rise from each
+        # wall getting SHORTER as they go higher (pyramid/tower shape), the opposite
+        # of a bowl — so the top tiers are narrow ledges hugging the wall.
+        #
+        # Cooperative puzzle (3 steps):
+        #   1. One player jumps over the central spike pit to the arena column and
+        #      pulls Lever_C → opens the center_gate blocking the exit door.
+        #      (The collectible is also on the column — bonus for doing the risky jump.)
+        #   2. P1 climbs LEFT tiers → pulls Lever_L (on L-T4) → gate_r opens for P2.
+        #   3. P2 climbs RIGHT tiers → pulls Lever_R (on R-T4) → gate_l opens for P1.
+        #   Both reach the Emperor's Box and touch the exit door simultaneously.
+
+        self.spawn_p1 = (200,  1020)   # left arena floor, clear of spike pit
+        self.spawn_p2 = (1720, 1020)   # right arena floor, clear of spike pit
+
+        # --- Movable walls ---
+        # Outer gates end flush with Emperor's Box (y=350) so they don't reach
+        # into the climbing zone and block players trying to access the tiers.
+        gate_l = MovableWall(220, pf.top, 20, 350 - pf.top)   # x=220–240, y=150–350
+        gate_r = MovableWall(1680, pf.top, 20, 350 - pf.top)  # x=1680–1700, y=150–350
+
+        # Center gates flank the exit door on both sides, running from the very
+        # top of the screen (y=0) down to y=430 so they solidly block lateral
+        # movement at Emperor's Box level.  Both are opened by the column lever.
+        # Door rect: midtop=(960,350), size 50×80 → x=935–985, y=350–430.
+        center_gate_l = MovableWall(910, 0, 25, 430)   # x=910–935, y=0–430 (left of door)
+        center_gate_r = MovableWall(985, 0, 25, 430)   # x=985–1010, y=0–430 (right of door)
+        self.movable_walls = [gate_l, gate_r, center_gate_l, center_gate_r]
+
+        self.walls = [
+            # ── Left tiers: SHORTER going up, all anchored to left wall (x=50) ──
+            # Vertical gaps: ground→T1=130 px, T1→T2=T2→T3=T3→T4=140 px (all jumpable)
+            pygame.Rect(50,  900, 370, 20),   # L-T1  [x=50–420]
+            pygame.Rect(50,  760, 300, 20),   # L-T2  [x=50–350]
+            pygame.Rect(50,  620, 230, 20),   # L-T3  [x=50–280]
+            pygame.Rect(50,  480, 150, 20),   # L-T4  [x=50–200]  Lever_L at x=100
+
+            # ── Right tiers (mirror, anchored to right wall x=1870) ──
+            pygame.Rect(1500, 900, 370, 20),  # R-T1  [x=1500–1870]
+            pygame.Rect(1570, 760, 300, 20),  # R-T2  [x=1570–1870]
+            pygame.Rect(1640, 620, 230, 20),  # R-T3  [x=1640–1870]
+            pygame.Rect(1720, 480, 150, 20),  # R-T4  [x=1720–1870]  Lever_R at x=1800
+
+            # ── Arena column (collectible + lever to open center gate) ──
+            pygame.Rect(920, 900, 100, 20),   # Column [x=920–1020]
+
+            # ── Emperor's Box (top-centre, between both outer gates) ──
+            pygame.Rect(240, 350, 1440, 20),  # [x=240–1680]  exit door at x=960
+        ]
+
+        # --- Hazards ---
+        # Central spike pit — must be jumped over to reach the column lever
+        self.hazards.add(Hazard(
+            (860, pf.bottom - 30),
+            color=pygame.Color("#bf616a"),
+            count=6, spike_w=30, spike_h=30, direction="up",
+        ))
+
+        # Moving hazards on T1, T2, T3 (the three tiers below the top tier T4).
+        # Left and right sides start at opposite ends so their timing is offset.
+        # Speed increases with height to make higher tiers harder.
+        _c = pygame.Color("#bf616a")
+
+        # Moving hazards leave a 30 px safe gap at each wall edge so players can
+        # stand near the wall, time the hazard, and jump up to the T4 lever.
+        # Left side: min_x=80  (safe zone x=50–79 near left wall)
+        # Right side: max_x=1840 (safe zone x=1841–1870 near right wall)
+
+        # T1 (y=900): L starts at safe-zone edge moving right, R starts at right limit moving left
+        self.hazards.add(MovingHazard(
+            (80, 870), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=80, max_x=420, speed=120,
+        ))
+        self.hazards.add(MovingHazard(
+            (1790, 870), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=1500, max_x=1840, speed=-120,
+        ))
+
+        # T2 (y=760): L starts at right limit moving left, R starts at safe-zone edge moving right
+        self.hazards.add(MovingHazard(
+            (300, 730), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=80, max_x=350, speed=-150,
+        ))
+        self.hazards.add(MovingHazard(
+            (1570, 730), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=1570, max_x=1840, speed=150,
+        ))
+
+        # T3 (y=620): L starts at safe-zone edge moving right, R starts at right limit moving left
+        self.hazards.add(MovingHazard(
+            (80, 590), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=80, max_x=280, speed=180,
+        ))
+        self.hazards.add(MovingHazard(
+            (1790, 590), color=_c, count=2, spike_w=25, spike_h=30, direction="up",
+            min_x=1640, max_x=1840, speed=-180,
+        ))
+
+        # --- Single collectible: arena column ---
+        # Requires a jump over the spike pit — same risky move needed for Lever_C,
+        # so the collectible is a bonus reward for the required column visit.
+        self.collectibles = [
+            Collectible(970, 890),  # Column surface y=900 → centre y=890
+        ]
+
+        # --- Three levers ---
+        # L-T4 lever → opens gate_r so P2 can reach Emperor's Box
+        # R-T4 lever → opens gate_l so P1 can reach Emperor's Box
+        # Column lever → opens center_gate so both can reach the exit door
+        self.levers = [
+            Lever(100,  480, linked_walls=[gate_r]),       # L-T4
+            Lever(1800, 480, linked_walls=[gate_l]),       # R-T4
+            Lever(940,  900, linked_walls=[center_gate_l, center_gate_r]),  # Arena column
+        ]
+
+        # --- Exit door: Emperor's Box, centre-top ---
+        self.exit_door = ExitDoor(960, 350)
 
     def draw(self, screen: pygame.Surface) -> None:
         hud_rect = pygame.Rect(0, 0, self.screen_w, self.hud_h)

@@ -46,6 +46,8 @@ class Menu:
                     self.next_screen = "game"
                 if button.text == "2":
                     self.next_screen = "game2"
+                if button.text == "3":
+                    self.next_screen = "game3"
                     
     # draw background 
     def draw(self, screen: pygame.Surface) -> None:
