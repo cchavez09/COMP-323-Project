@@ -7,6 +7,7 @@ from lost_in_time.button import Button
 from lost_in_time.collectible import Collectible
 from lost_in_time.hazard import Hazard
 from lost_in_time.hud import HUD
+from lost_in_time.pause_menu import PauseMenu
 
 # Controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
@@ -55,6 +56,9 @@ class Game:
         )
 
         self.hud = HUD(SCREEN_WIDTH, HUD_H)
+
+        self.pause_menu = PauseMenu(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.paused = False
 
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
@@ -131,11 +135,33 @@ class Game:
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
+            # pause menu toggle on ESC; also quit from title menu or level complete screen
             if event.key == pygame.K_ESCAPE:
-                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                if self.state == "play":
+                    self.paused = not self.paused
+                else:
+                    pygame.event.post(pygame.event.Event(pygame.QUIT))
             if event.key == pygame.K_r and self.state in ("play", "level_complete", "game_over"):
                 self._restart()
                 self.state = "play"
+
+        # while paused only pause should receive input events
+        if self.paused:
+            self.pause_menu.handle_event(event)
+            action = self.pause_menu.action
+            if action == "resume":
+                self.paused = False
+            elif action == "level_select":
+                self.paused = False
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+                self.menu_track = ["title"]
+                self.state = "title_menu"
+            elif action == "restart":
+                self._restart()
+                self.state = "play"
+            elif action == "quit":
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+            return  # blocking all game input while paused
 
         if self.state == "title_menu":
             self.menu.handle_event(event)
@@ -149,6 +175,11 @@ class Game:
                 self.state = "title_menu"
 
         if self.state == "play":
+            # HUD has its own event handling for the pause button, so check it first
+            self.hud.handle_event(event)
+            if self.hud.pause_clicked:
+                self.paused = not self.paused
+                return
             for player in self.players:
                 player.handle_event(event)
             # Forward interact keypresses to levers
@@ -156,6 +187,10 @@ class Game:
                 lever.handle_event(event, self.players)
 
     def update(self, dt: float) -> None:
+        # menu still neds to be navigable while paused but other game updates frozen
+        if self.paused:
+            return
+            
         if self.state == "title_menu":
             if self.menu.next_screen:
                 if self.menu.next_screen in ("game", "game2"):
@@ -209,9 +244,11 @@ class Game:
         elif self.state in ("play", "level_complete", "game_over"):
             self.screen.fill(pygame.Color("#474747"))
             self.level.draw(self.screen)
-            self.hud.draw(self.screen)
+            self.hud.draw(self.screen, paused=self.paused)
             for player in self.players:
                 player.draw(self.screen)
+            if self.paused:
+                self.pause_menu.draw(self.screen)
 
             if self.state == "level_complete":
                 font = pygame.font.SysFont("Arial", 72, True)
