@@ -9,6 +9,7 @@ from lost_in_time.hazard import Hazard
 from lost_in_time.hud import HUD
 from lost_in_time.pause_menu import PauseMenu
 
+
 # Controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
     "left": pygame.K_a,
@@ -47,9 +48,10 @@ class Game:
         self.menu_track = []
 
         # Spawn positions come from the level so each level can place players anywhere
+        # P1 = cowboy, P2 = Roman soldier
         self.players = [
-            Player(*self.level.spawn_p1, CONTROLS_PLAYER1),
-            Player(*self.level.spawn_p2, CONTROLS_PLAYER2),
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1, sprite_kind="cowboy"),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2, sprite_kind="roman"),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
@@ -154,8 +156,8 @@ class Game:
     def _restart(self) -> None:
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
-            Player(*self.level.spawn_p1, CONTROLS_PLAYER1),
-            Player(*self.level.spawn_p2, CONTROLS_PLAYER2),
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1, sprite_kind="cowboy"),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2, sprite_kind="roman"),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
