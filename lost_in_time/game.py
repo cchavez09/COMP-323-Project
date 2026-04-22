@@ -63,6 +63,8 @@ class Game:
         )
 
         self.hud = HUD(SCREEN_WIDTH, HUD_H)
+        if self.level.collectibles:
+            self.hud.set_gem_kind(self.level.collectibles[0].kind)
 
         self.pause_menu = PauseMenu(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.paused = False
@@ -163,6 +165,9 @@ class Game:
         self.players[1].color = pygame.Color("#0000FF")
 
         self.hud.reset()
+        # tell HUD which gem this level uses 
+        if self.level.collectibles:
+            self.hud.set_gem_kind(self.level.collectibles[0].kind)
         self._shake_trauma = 0.0
 
         pygame.mixer.stop()
