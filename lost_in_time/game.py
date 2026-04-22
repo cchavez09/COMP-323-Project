@@ -55,6 +55,10 @@ class Game:
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
+        if self.current_level == 4:
+            for player in self.players:
+                player.GRAVITY = 600.0
+                player.JUMP_SPEED = 600.0
 
         self.level_select_button = Button(
             "Level Select",
@@ -161,6 +165,10 @@ class Game:
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
+        if self.current_level == 4:
+            for player in self.players:
+                player.GRAVITY = 600.0
+                player.JUMP_SPEED = 600.0
 
         self.hud.reset()
         self._shake_trauma = 0.0
@@ -232,7 +240,7 @@ class Game:
 
         if self.state == "title_menu":
             if self.menu.next_screen:
-                _level_map = {"game": 1, "game2": 2, "game3": 3}
+                _level_map = {"game": 1, "game2": 2, "game3": 3, "game4": 4}
                 if self.menu.next_screen in _level_map:
                     self.current_level = _level_map[self.menu.next_screen]
                     pygame.mixer.music.stop()  # stop menu music when game starts

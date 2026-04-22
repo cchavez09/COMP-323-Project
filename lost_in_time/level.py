@@ -45,6 +45,8 @@ class Level:
             self._build_level2()
         elif self.level_number == 3:
             self._build_level3()
+        elif self.level_number == 4:
+            self._build_level4()
 
     def _build_level1(self) -> None:
         pf = self.playfield
@@ -238,6 +240,103 @@ class Level:
         ]
 
         self.exit_door = ExitDoor(960, 350)
+
+    def _build_level4(self) -> None:
+        pf = self.playfield
+        # Playfield: left=50, top=150, right=1870, bottom=1030
+        # Space station — cross-over co-op puzzle (enhanced):
+        #   P1 climbs left side and pulls lever that opens P2's gate (right gate).
+        #   P2 climbs right side and pulls lever that opens P1's gate (left gate).
+        #   Both must cooperate before either can reach the centre exit.
+        #   Bonus platforms L5/R5 hold extra collectibles for thorough explorers.
+
+        self.spawn_p1 = (120, 1010)
+        self.spawn_p2 = (1800, 1010)
+
+        # Full-height laser gates dividing left/right zones from the centre
+        gate_l = MovableWall(680, pf.top, 20, pf.bottom - pf.top)
+        gate_r = MovableWall(1250, pf.top, 20, pf.bottom - pf.top)
+        self.movable_walls = [gate_l, gate_r]
+
+        self.walls = [
+            # ── Left climbing path ──
+            pygame.Rect(50,  880, 280, 20),   # L1
+            pygame.Rect(280, 750, 250, 20),   # L2
+            pygame.Rect(50,  620, 230, 20),   # L3
+            pygame.Rect(100, 490, 200, 20),   # L4  ← P1 lever here
+            pygame.Rect(220, 420, 200, 20),   # L5  ← bonus platform / collectible
+
+            # ── Right climbing path (mirror) ──
+            pygame.Rect(1610, 880, 280, 20),  # R1
+            pygame.Rect(1440, 750, 250, 20),  # R2
+            pygame.Rect(1660, 620, 230, 20),  # R3
+            pygame.Rect(1680, 490, 200, 20),  # R4  ← P2 lever here
+            pygame.Rect(1560, 380, 200, 20),  # R5  ← bonus platform / collectible
+
+            # ── Centre platforms (x=700-1250) ──
+            pygame.Rect(700,  750, 260, 20),  # C1-left   entry from left zone
+            pygame.Rect(1010, 750, 260, 20),  # C1-right  entry from right zone
+            pygame.Rect(820,  610, 320, 20),  # C2        mid platform
+            pygame.Rect(870,  460, 220, 20),  # C3        upper platform / exit
+        ]
+
+        # P1's lever (L4) opens right gate — lets P2 into the centre.
+        # P2's lever (R4) opens left gate — lets P1 into the centre.
+        self.levers = [
+            Lever(185, 490, linked_walls=[gate_r]),
+            Lever(1790, 490, linked_walls=[gate_l]),
+        ]
+
+        _c = pygame.Color("#bf616a")
+
+        # Moving hazards on L1 and R1 (ground-level outer platforms)
+        self.hazards.add(MovingHazard(
+            (70, 850), color=_c, count=2, spike_w=30, spike_h=30, direction="up",
+            min_x=70, max_x=310, speed=110,
+        ))
+        self.hazards.add(MovingHazard(
+            (1810, 850), color=_c, count=2, spike_w=30, spike_h=30, direction="up",
+            min_x=1640, max_x=1855, speed=-110,
+        ))
+        # Moving hazards on L2 and R2
+        self.hazards.add(MovingHazard(
+            (310, 720), color=_c, count=2, spike_w=30, spike_h=30, direction="up",
+            min_x=280, max_x=510, speed=-135,
+        ))
+        self.hazards.add(MovingHazard(
+            (1440, 720), color=_c, count=2, spike_w=30, spike_h=30, direction="up",
+            min_x=1270, max_x=1665, speed=135,
+        ))
+        # Moving hazards on L3 and R3 (new — makes upper climb more dangerous)
+        self.hazards.add(MovingHazard(
+            (80, 590), color=_c, count=1, spike_w=30, spike_h=30, direction="up",
+            min_x=70, max_x=250, speed=130,
+        ))
+        self.hazards.add(MovingHazard(
+            (1690, 590), color=_c, count=1, spike_w=30, spike_h=30, direction="up",
+            min_x=1665, max_x=1840, speed=-130,
+        ))
+        # Moving asteroid on C2 (new — centre mid-platform is now dangerous too)
+        self.hazards.add(MovingHazard(
+            (850, 580), color=_c, count=1, spike_w=30, spike_h=30, direction="up",
+            min_x=840, max_x=1100, speed=160,
+        ))
+
+        # Asteroid field covering the deadly centre ground (falls = instant death)
+        self.hazards.add(Hazard(
+            (700, pf.bottom - 30), color=_c,
+            count=18, spike_w=30, spike_h=30, direction="up",
+        ))
+
+        # Three collectibles: C2 centre reward + bonus ones on L5 and R5
+        self.collectibles = [
+            Collectible(980, 600),   # C2 — centre reward
+            Collectible(320, 370),   # L5 — P1-side bonus
+            Collectible(1660, 370),  # R5 — P2-side bonus
+        ]
+
+        # Exit door on C3 (both players must touch simultaneously)
+        self.exit_door = ExitDoor(975, 460)
 
     def draw(self, screen: pygame.Surface) -> None:
         # themed background
