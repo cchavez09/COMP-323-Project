@@ -33,6 +33,8 @@ class Menu:
             self.buttons.append(Button("Host", (self.screen_width // 2 - 150, 600), 220, 100, self.background_color))
             self.buttons.append(Button("Join", (self.screen_width // 2 + 150, 600), 220, 100, self.background_color))
             self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
+        elif self.menu == "host" or self.menu == "join":
+            self.buttons.append(Button("Back", (self.screen_width // 2, 900), 450, 100, self.background_color))
 
     # event in relation to button click
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -51,12 +53,16 @@ class Menu:
                     self.next_screen = "game"
                 if button.text == "2":
                     self.next_screen = "game2"
+                if button.text == "3":
+                    self.next_screen = "game3"
                 if button.text == "Multiplayer":
                     self.next_screen = "multiplayer"
                 if button.text == "Host":
                     self.next_screen = "host"
                 if button.text == "Join":
                     self.next_screen = "join"
+                
+                    
     # draw background 
     def draw(self, screen: pygame.Surface) -> None:
         # Draw menu design while also drawing buttons for their respective menu

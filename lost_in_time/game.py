@@ -9,6 +9,8 @@ from lost_in_time.hazard import Hazard
 from lost_in_time.hud import HUD
 from lost_in_time.Multiplayer.server import Server
 from lost_in_time.Multiplayer.client import Client
+from lost_in_time.pause_menu import PauseMenu
+
 
 # Controls for p1 and p2 defined to be passed to player class
 CONTROLS_PLAYER1 = {
@@ -28,12 +30,17 @@ SCREEN_HEIGHT = 1080
 PADDING = 50
 HUD_H = 100
 
+_SHAKE_TRAUMA = 0.5
+_SHAKE_DECAY = 0.8
+_SHAKE_MAX_OFFSET = 20
+
 class Game:
 
-    def __init__(self) -> None:
+    def __init__(self, server_ip: str = None) -> None:
         self.fps = FPS
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self._render_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.current_level = 1
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title")
@@ -42,10 +49,11 @@ class Game:
         # Keep track of menus for back button implementation
         self.menu_track = []
 
-        # Player 1 starts left, player 2 starts right (inside the cage in level 1)
+        # Spawn positions come from the level so each level can place players anywhere
+        # P1 = cowboy, P2 = Roman soldier
         self.players = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1, sprite_kind="cowboy"),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2, sprite_kind="roman"),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
@@ -61,7 +69,33 @@ class Game:
         # Multiplayer attributes
         self.server = None
         self.client = None
-        self.join_ip = ""
+        self.join_ip = server_ip or ""
+        self.pause_menu = PauseMenu(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.paused = False
+
+        self._shake_trauma = 0.0
+
+        # main music
+        pygame.mixer.init()
+        pygame.mixer.music.load("assets/music/menu_music.mp3")
+        pygame.mixer.music.play(-1)
+
+        # sound effect for collecting collectibles
+        self.collect_sound = pygame.mixer.Sound("assets/sounds/collect.mp3")
+        # sound effect for player death
+        self.death_sound = pygame.mixer.Sound("assets/sounds/death.mp3")
+
+    def _add_trauma(self, amount: float) -> None:
+        self._shake_trauma = min(1.0, self._shake_trauma + amount)
+
+    def _shake_offset(self) -> tuple[int, int]:
+        if self._shake_trauma <= 0:
+            return (0, 0)
+        shake = self._shake_trauma ** 2
+        import random
+        dx = int(random.uniform(-1, 1) * _SHAKE_MAX_OFFSET * shake)
+        dy = int(random.uniform(-1, 1) * _SHAKE_MAX_OFFSET * shake)
+        return (dx, dy)
 
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
@@ -128,24 +162,54 @@ class Game:
     def _restart(self) -> None:
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.players = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER1),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, CONTROLS_PLAYER2)
+            Player(*self.level.spawn_p1, CONTROLS_PLAYER1, sprite_kind="cowboy"),
+            Player(*self.level.spawn_p2, CONTROLS_PLAYER2, sprite_kind="roman"),
         ]
         self.players[0].color = pygame.Color("#FF0000")
         self.players[1].color = pygame.Color("#0000FF")
 
         self.hud.reset()
+        self._shake_trauma = 0.0
+
+        pygame.mixer.stop()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
+            # pause menu toggle on ESC; also quit from title menu or level complete screen
             if event.key == pygame.K_ESCAPE:
-                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                if self.state == "play":
+                    if self.client:
+                        # Pause feature for multiplayer
+                        self.client.send("pause", {"pause": not self.paused})
+                    else:
+                        self.paused = not self.paused
+                else:
+                    pygame.event.post(pygame.event.Event(pygame.QUIT))
             if event.key == pygame.K_r and self.state in ("play", "level_complete", "game_over"):
                 self._restart()
                 self.state = "play"
                 # Send restart message to server 
                 if self.client:
                     self.client.send("restart", {})
+
+        # while paused only pause menu should receive input events
+        if self.paused:
+            self.pause_menu.handle_event(event)
+            action = self.pause_menu.action
+            if action == "resume":
+                self.paused = False
+            elif action == "level_select":
+                self.paused = False
+                pygame.mixer.music.play(-1)  # restart menu music
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+                self.menu_track = ["title"]
+                self.state = "title_menu"
+            elif action == "restart":
+                self._restart()
+                self.state = "play"
+            elif action == "quit":
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+            return  # block all game input while paused
 
         if self.state == "title_menu":
             self.menu.handle_event(event)
@@ -154,6 +218,7 @@ class Game:
             self.level_select_button.handle_event(event)
             if self.level_select_button.clicked:
                 self.level_select_button.clicked = False
+                pygame.mixer.music.play(-1)  # restart menu music
                 self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
                 self.menu_track = ["title"]
                 self.state = "title_menu"
@@ -189,12 +254,31 @@ class Game:
                     char = event.unicode
                     if char.isdigit() or char == ".":
                         self.join_ip += char
+            # HUD has its own event handling for the pause button, so check it first
+            self.hud.handle_event(event)
+            if self.hud.pause_clicked:
+                self.paused = not self.paused
+                return
+            for player in self.players:
+                player.handle_event(event)
+            # Forward interact keypresses to levers
+            for lever in self.level.levers:
+                lever.handle_event(event, self.players)
 
     def update(self, dt: float) -> None:
+        # menu still needs to be navigable while paused but other game updates frozen
+        if self.paused:
+            return
+
+        if self._shake_trauma > 0:
+            self._shake_trauma = max(0.0, self._shake_trauma - _SHAKE_DECAY * dt)
+
         if self.state == "title_menu":
             if self.menu.next_screen:
-                if self.menu.next_screen in ("game", "game2"):
-                    self.current_level = 2 if self.menu.next_screen == "game2" else 1
+                _level_map = {"game": 1, "game2": 2, "game3": 3}
+                if self.menu.next_screen in _level_map:
+                    self.current_level = _level_map[self.menu.next_screen]
+                    pygame.mixer.music.stop()  # stop menu music when game starts
                     self._restart()
                     self.state = "play"
                 elif self.menu.next_screen == "back":
@@ -205,7 +289,7 @@ class Game:
                 # Initialize server and client with server IP for host if player 
                 # chooses to host
                 elif self.menu.next_screen == "host":
-                    self.server = Server()
+                    self.server = Server(self.current_level, ip = self.join_ip)
                     self.client = Client(self.server.ip)
                     self.client.send("connect", {})
                     self.state = "hosting"
@@ -246,13 +330,23 @@ class Game:
                     self._apply_wall_collisions(player)
                     self._apply_bounds_player(player)
 
-                    for collectible in self.level.collectibles:
-                        if collectible.active and player.rect.colliderect(collectible.rect):
-                            collectible.active = False
-                            self.hud.notify_collected()
+                for collectible in self.level.collectibles:
+                    if collectible.active and player.rect.colliderect(collectible.rect):
+                        collectible.collect()
+                        self.hud.notify_collected()
+                        self.collect_sound.play()
 
+                if self.state == "play":
                     for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
+                        self._add_trauma(_SHAKE_TRAUMA)
+                        self.death_sound.play()
                         self.state = "game_over"
+                        break
+
+                for collectible in self.level.collectibles:
+                    collectible.update(dt)
+
+                self.level.hazards.update(dt)
 
                 for lever in self.level.levers:
                     lever.update(dt)
@@ -264,7 +358,7 @@ class Game:
                     self.level.exit_door.update(self.players)
                     if self.level.exit_door.completed:
                         self.state = "level_complete"
-                
+
                 self.hud.update(dt)
 
                 self.players = [p for p in self.players if p.health > 0]
@@ -287,7 +381,12 @@ class Game:
                     self.server.broadcast()
 
                 # Receive game state from server with broadcase
-                self.client.receive()
+                if self.state == "play" and self.client:
+                    self.client.receive()
+                    self.paused = self.client.paused
+                
+                if self.paused:
+                    return
                 
                 # Check to see if client has game state and then proceed to update
                 # player positions based on game state data
@@ -328,41 +427,47 @@ class Game:
                 self.hud.update(dt)
 
     def draw(self) -> None:
+        surf = self._render_surf
+
         if self.state == "title_menu":
-            self.menu.draw(self.screen)
-
+            self.menu.draw(surf)
         elif self.state in ("play", "level_complete", "game_over"):
-            self.screen.fill(pygame.Color("#474747"))
-            self.level.draw(self.screen)
-            self.hud.draw(self.screen)
+            surf.fill(pygame.Color("#474747"))
+            self.level.draw(surf)
+            self.hud.draw(surf, paused=self.paused)
             for player in self.players:
-                player.draw(self.screen)
-
+                player.draw(surf)
+            if self.paused:
+                self.pause_menu.draw(surf)
             if self.state == "level_complete":
                 font = pygame.font.SysFont("Arial", 72, True)
                 msg = font.render("Level Complete!", True, pygame.Color("#FFD700"))
-                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
-                self.level_select_button.draw(self.screen)
-
+                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+                self.level_select_button.draw(surf)
             elif self.state == "game_over":
                 font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("You died!  Press R to restart", True, pygame.Color("#FF4444"))
-                self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+                msg = font.render("You died! Press R to restart", True, pygame.Color("#FF4444"))
+                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+
 
         # Added drawing for hosting and joining states with basic instructions and minimum design
         # Will fix
         elif self.state == "hosting":
-            self.screen.fill(pygame.Color("#474747"))
+            surf.fill(pygame.Color("#474747"))
             font = pygame.font.SysFont("Arial", 48, True)
             ip_msg = font.render(f"Your IP: {self.server.ip}", True, pygame.Color("#FFFFFF"))
             msg = font.render("Hosting... Waiting for player to join.", True, pygame.Color("#FFFFFF"))
-            self.screen.blit(ip_msg, (SCREEN_WIDTH // 2 - ip_msg.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
-            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
+            surf.blit(ip_msg, (SCREEN_WIDTH // 2 - ip_msg.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
+            surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
         
         elif self.state == "joining":
-            self.screen.fill(pygame.Color("#474747"))
+            surf.fill(pygame.Color("#474747"))
             font = pygame.font.SysFont("Arial", 48, True)
             msg = font.render("Enter Host IP: " + self.join_ip, True, pygame.Color("#FFFFFF"))
             help = font.render("Press Enter to connect, Backspace to delete", True, pygame.Color("#FFFFFF"))
-            self.screen.blit(help, (SCREEN_WIDTH // 2 - help.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
-            self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
+            surf.blit(help, (SCREEN_WIDTH // 2 - help.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
+            surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
+        
+        dx, dy = self._shake_offset()
+        self.screen.fill(pygame.Color("#000000"))
+        self.screen.blit(surf, (dx, dy))

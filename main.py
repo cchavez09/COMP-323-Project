@@ -1,4 +1,5 @@
 import pygame
+import sys
 
 from lost_in_time.game import Game
 
@@ -7,7 +8,10 @@ def main() -> None:
     pygame.init()
     pygame.display.set_caption("Lost in Time")
 
-    game = Game()
+    server_ip = sys.argv[1] if len(sys.argv) > 1 else None
+
+    # Start game with server IP if provided
+    game = Game(server_ip = server_ip)
     clock = pygame.time.Clock()
 
     running = True

@@ -17,6 +17,7 @@ class Client:
         # Does not need to wait for response to send next message
         # Prevent Freezing
         self.client.setblocking(False)
+        self.paused = False
 
     def send(self, type, data):
         # Send data to server
@@ -45,5 +46,7 @@ class Client:
             self.game_state = None
         elif type == "state":
             self.game_state = data
+        elif type == "pause":
+            self.paused = data.get("pause")
 
     

@@ -19,8 +19,8 @@ HUD_H = 100
 
 
 class Server:
-    def __init__(self):
-        self.ip = socket.gethostbyname(socket.gethostname())
+    def __init__(self, level: int = 1, ip: str = None) -> None:
+        self.ip = ip
         self.port = port
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server.bind((self.ip, self.port)) 
@@ -34,7 +34,8 @@ class Server:
         }
 
         # Hardcode first level for testing
-        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
+        self.current_level = level
+        self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
 
         # Needed to add temp input for player initialization
         self.temp = {"left": 0, "right": 0, "jump": 0}
@@ -44,6 +45,8 @@ class Server:
         ]
         self.bodies[0].color = pygame.Color("#FF0000")
         self.bodies[1].color = pygame.Color("#0000FF")
+
+        self.paused = False
 
     # listen for messages from players
     def handle_connect(self):
@@ -88,6 +91,11 @@ class Server:
             if key in (pygame.K_e, pygame.K_SLASH):
                 for lever in self.level.levers:
                     lever.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": key}), self.bodies)
+
+        elif type == "pause" and addr in self.players:
+            self.paused = not self.paused
+            for addr in self.players:
+                self.send("pause", {"pause": self.paused}, addr)
 
      # Restart resets the level and both players without quitting
     def _restart(self) -> None:
@@ -139,6 +147,7 @@ class Server:
             "door_completed": self.level.exit_door.completed,
             "door_p1_touching": self.level.exit_door.p1_touching,
             "door_p2_touching": self.level.exit_door.p2_touching,
+            "pause": False
         }
         for addr in self.players:
             self.send("state", state, addr)
