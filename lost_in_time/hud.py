@@ -2,14 +2,27 @@ import pygame
 
 
 class HUD:
+    _gem_sprites = None
+
+    @classmethod
+    def _load_gem_sprites(cls) -> dict:
+        if cls._gem_sprites is not None:
+            return cls._gem_sprites
+        cls._gem_sprites = {
+            "green": pygame.image.load("assets/sprites/gem_green.png").convert_alpha(),
+            "red":   pygame.image.load("assets/sprites/gem_red.png").convert_alpha(),
+            "blue":  pygame.image.load("assets/sprites/gem_blue.png").convert_alpha(),
+        }
+        return cls._gem_sprites
+
     def __init__(self, screen_w: int, hud_h: int) -> None:
         self.screen_w = screen_w
         self.hud_h = hud_h
         self.elapsed = 0.0
         self.collected = False
+        self.gem_kind = "green"  
         self._font = pygame.font.SysFont(None, 36)
 
-        # pause button (top-right corner of HUD)
         self._btn_font = pygame.font.SysFont("Times New Roman", 28, True)
         btn_w, btn_h = 120, 50
         self.pause_btn_rect = pygame.Rect(
@@ -24,13 +37,16 @@ class HUD:
         self.elapsed = 0.0
         self.collected = False
 
+    # which gem kind the HUD should display for the current level
+    def set_gem_kind(self, kind: str) -> None:
+        self.gem_kind = kind
+
     def notify_collected(self) -> None:
         self.collected = True
 
     def update(self, dt: float) -> None:
         self.elapsed += dt
 
-    # pause button click is handled separately from player input events since UI element
     def handle_event(self, event: pygame.event.Event) -> None:
         self.pause_clicked = False
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -38,24 +54,35 @@ class HUD:
                 self.pause_clicked = True
 
     def draw(self, screen: pygame.Surface, paused: bool = False) -> None:
-        minutes = int(self.elapsed) // 60 # calculate minutes by integer division
-        seconds = int(self.elapsed) % 60 # calculate seconds by modulus to get remainder after minutes
-        timer_surf = self._font.render(f"Time: {minutes:02d}:{seconds:02d}", True, pygame.Color("#FFFFFF")) # format time as MM:SS with leading zeros
-        screen.blit(timer_surf, (20, self.hud_h // 2 - timer_surf.get_height() // 2)) # draw timer on left side of HUD, vertically centered
+        minutes = int(self.elapsed) // 60
+        seconds = int(self.elapsed) % 60
+        timer_surf = self._font.render(f"Time: {minutes:02d}:{seconds:02d}", True, pygame.Color("#FFFFFF"))
+        screen.blit(timer_surf, (20, self.hud_h // 2 - timer_surf.get_height() // 2))
 
-        # circle appears only once picked up
         label_surf = self._font.render("Collectible:", True, pygame.Color("#FFFFFF"))
         lx = self.screen_w // 2 - 80
         ly = self.hud_h // 2 - label_surf.get_height() // 2
         screen.blit(label_surf, (lx, ly))
 
-        # only draw the collectible indicator if it's been collected
-        if self.collected:
-            cx = lx + label_surf.get_width() + 20
-            cy = self.hud_h // 2
-            pygame.draw.circle(screen, pygame.Color("#69005D"), (cx, cy), 10)
+        # draw the gem next to the label: ghosted if uncollected, full if collected
+        sprites = self._load_gem_sprites()
+        gem = sprites.get(self.gem_kind, sprites["green"])
+        # scale gem to fit the HUD compactly
+        target_h = int(self.hud_h * 0.3)
+        scale = target_h / gem.get_height()
+        target_w = int(gem.get_width() * scale)
+        gem_scaled = pygame.transform.smoothscale(gem, (target_w, target_h))
+        gx = lx + label_surf.get_width() + 10
+        gy = self.hud_h // 2 - target_h // 2
 
-        # pause button
+        if self.collected:
+            screen.blit(gem_scaled, (gx, gy))
+        else:
+            # ghosted silhouette so the player knows what to look for
+            ghost = gem_scaled.copy()
+            ghost.set_alpha(70)
+            screen.blit(ghost, (gx, gy))
+
         btn_color = pygame.Color("#555555") if paused else pygame.Color("#3D3D3D")
         if self.pause_btn_rect.collidepoint(pygame.mouse.get_pos()):
             btn_color = pygame.Color("#777777")
