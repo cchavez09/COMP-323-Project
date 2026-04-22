@@ -96,7 +96,7 @@ class Level:
 
         # --- Collectible on top of Step 1 (center of platform) ---
         self.collectibles = [
-            Collectible(175, 910)   # radius=10, so center sits 10 px above y=920 surface
+            Collectible(175, 910, kind="green")   # radius=10, so center sits 10 px above y=920 surface
         ]
 
         # --- Lever (player 1 activates it to open the mid-wall and free player 2) ---
@@ -152,7 +152,7 @@ class Level:
         ))
 
         self.collectibles = [
-            Collectible(150, 340),
+            Collectible(150, 340, kind="red"),
         ]
 
         self.levers = [
@@ -230,7 +230,7 @@ class Level:
         ))
 
         self.collectibles = [
-            Collectible(970, 890),
+            Collectible(970, 890, kind="blue"),
         ]
 
         self.levers = [
