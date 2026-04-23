@@ -1,5 +1,6 @@
 import pygame
 
+
 from lost_in_time.level import Level
 from lost_in_time.player import Player
 from lost_in_time.menu import Menu
@@ -10,6 +11,8 @@ from lost_in_time.hud import HUD
 from lost_in_time.Multiplayer.server import Server
 from lost_in_time.Multiplayer.client import Client
 from lost_in_time.pause_menu import PauseMenu
+
+
 
 
 # Controls for p1 and p2 defined to be passed to player class
@@ -24,30 +27,41 @@ CONTROLS_PLAYER2 = {
     "jump": pygame.K_UP
 }
 
+
 FPS = 60
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 PADDING = 50
 HUD_H = 100
 
+
 _SHAKE_TRAUMA = 0.5
 _SHAKE_DECAY = 0.8
 _SHAKE_MAX_OFFSET = 20
+
 
 class Game:
 
     def __init__(self, server_ip: str = None) -> None:
         self.fps = FPS
 
+
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self._render_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.current_level = 1
+
+        # Tracks which gem kinds have been collected across levels 1-3.
+        # Level 4 stays locked until all 3 are in this set.
+        self.collected_gems = set()
+
         self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
-        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title")
+        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "title", self.collected_gems)
         self.state = "title_menu"
+
 
         # Keep track of menus for back button implementation
         self.menu_track = []
+
 
         # Spawn positions come from the level so each level can place players anywhere
         # P1 = cowboy, P2 = Roman soldier
@@ -61,11 +75,18 @@ class Game:
                 player.GRAVITY = 600.0
                 player.JUMP_SPEED = 600.0
 
+
+        # Arcade-style level select button for the level complete screen
         self.level_select_button = Button(
             "Level Select",
-            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80),
-            400, 100, "#8DF78DFF"
+            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 120),
+            420, 90, "#2a1060"
         )
+
+        # Small bitmap fonts scaled up nearest-neighbor for arcade pixel look
+        self._end_title_font = pygame.font.Font(None, 40)
+        self._end_sub_font = pygame.font.Font(None, 22)
+
 
         self.hud = HUD(SCREEN_WIDTH, HUD_H)
         if self.level.collectibles:
@@ -74,24 +95,38 @@ class Game:
         # Multiplayer attributes
         self.server = None
         self.client = None
-        self.join_ip = server_ip or ""
+        self.join_ip = ""
+        self.server_ip = server_ip
+        
         self.pause_menu = PauseMenu(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.paused = False
 
+
         self._shake_trauma = 0.0
+
 
         # main music
         pygame.mixer.init()
         pygame.mixer.music.load("assets/music/menu_music.mp3")
         pygame.mixer.music.play(-1)
 
+
         # sound effect for collecting collectibles
         self.collect_sound = pygame.mixer.Sound("assets/sounds/collect.mp3")
         # sound effect for player death
         self.death_sound = pygame.mixer.Sound("assets/sounds/death.mp3")
 
+
+    # render pixel-art arcade text by scaling up a small render nearest-neighbor
+    def _arcade_text(self, text: str, font: pygame.font.Font, color: pygame.Color, scale: int = 2) -> pygame.Surface:
+        small = font.render(text, False, color)
+        w, h = small.get_size()
+        return pygame.transform.scale(small, (w * scale, h * scale))
+
+
     def _add_trauma(self, amount: float) -> None:
         self._shake_trauma = min(1.0, self._shake_trauma + amount)
+
 
     def _shake_offset(self) -> tuple[int, int]:
         if self._shake_trauma <= 0:
@@ -102,15 +137,19 @@ class Game:
         dy = int(random.uniform(-1, 1) * _SHAKE_MAX_OFFSET * shake)
         return (dx, dy)
 
+
     def _apply_bounds_player(self, player: Player) -> None:
         player.rect.clamp_ip(self.level.playfield)
+
 
         player.pos.x = max(self.level.playfield.left, min(self.level.playfield.right, player.pos.x))
         player.pos.y = max(self.level.playfield.top, min(self.level.playfield.bottom, player.pos.y))
 
+
         if player.rect.bottom >= self.level.playfield.bottom:
             player.on_ground = True
             player.velocity.y = 0
+
 
     def _apply_wall_collisions(self, player: Player) -> None:
         # Combine static walls and currently-active movable walls
@@ -121,13 +160,16 @@ class Game:
             if not player.rect.colliderect(wall):
                 continue
 
+
             # Minimum-overlap resolution: push the player out the shortest axis
             overlap_left   = player.rect.right  - wall.left
             overlap_right  = wall.right  - player.rect.left
             overlap_top    = player.rect.bottom  - wall.top
             overlap_bottom = wall.bottom - player.rect.top
 
+
             min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
 
             if min_overlap == overlap_top:
                 # Player landed on top of wall
@@ -152,6 +194,7 @@ class Game:
                 player.pos.x = player.rect.centerx
                 player.velocity.x = 0
 
+
         # Ground probe: pygame's colliderect returns False when rects only touch
         # (share an edge without overlapping), so after resolution the player sits
         # at exactly rect.bottom == wall.top and colliderect misses it next frame.
@@ -162,6 +205,7 @@ class Game:
                 if probe.colliderect(wall):
                     player.on_ground = True
                     break
+
 
     # Restart resets the level and both players without quitting
     def _restart(self) -> None:
@@ -176,13 +220,46 @@ class Game:
                 player.GRAVITY = 600.0
                 player.JUMP_SPEED = 600.0
 
+
         self.hud.reset()
-        # tell HUD which gem this level uses 
+        # tell HUD which gem this level uses
         if self.level.collectibles:
             self.hud.set_gem_kind(self.level.collectibles[0].kind)
         self._shake_trauma = 0.0
 
+
         pygame.mixer.stop()
+
+
+    # draw a themed panel with cosmic purple background and gold border (matches pause menu)
+    def _draw_end_panel(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
+        # Dim the gameplay behind the panel
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+        # Panel body + gold border
+        pygame.draw.rect(screen, pygame.Color("#2a1060"), rect, border_radius=16)
+        pygame.draw.rect(screen, pygame.Color("#ffd95a"), rect, width=3, border_radius=16)
+
+
+    # draw an arcade-styled button matching the rest of the menu style
+    def _draw_arcade_button(self, screen: pygame.Surface, button: Button, label: str) -> None:
+        rect = button.rect
+        hovered = rect.collidepoint(pygame.mouse.get_pos())
+
+        # Hover lifts the button slightly for feedback
+        draw_rect = rect.copy()
+        if hovered:
+            draw_rect.y -= 4
+
+        body_color = pygame.Color("#4a2890") if hovered else pygame.Color("#2a1060")
+        pygame.draw.rect(screen, body_color, draw_rect, border_radius=10)
+        pygame.draw.rect(screen, pygame.Color("#ffd95a"), draw_rect, width=3, border_radius=10)
+
+        # Button label in pixel-art arcade style
+        label_surf = self._arcade_text(label.upper(), self._end_sub_font, pygame.Color("#ffffff"), scale=2)
+        screen.blit(label_surf, label_surf.get_rect(center=draw_rect.center))
+
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
@@ -204,6 +281,7 @@ class Game:
                     self._restart()
                     self.state = "play"
 
+
         # while paused only pause menu should receive input events
         # Added self.client checks to allow server to correctly display each eaction
         # to all clients
@@ -221,7 +299,7 @@ class Game:
                 else:
                     self.paused = False
                     pygame.mixer.music.play(-1)  # restart menu music
-                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select", self.collected_gems)
                     self.menu_track = ["title"]
                     self.state = "title_menu"
             elif action == "restart":
@@ -236,7 +314,12 @@ class Game:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
             return  # block all game input while paused
 
+
         if self.state == "title_menu":
+            self.menu.handle_event(event)
+
+        if self.state == "hosting":
+            # Handle back button event
             self.menu.handle_event(event)
 
         if self.state == "level_complete":
@@ -248,9 +331,10 @@ class Game:
                     self.client.send("menu", {})
                 else:
                     pygame.mixer.music.play(-1)  # restart menu music
-                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select", self.collected_gems)
                     self.menu_track = ["title"]
                     self.state = "title_menu"
+
 
         if self.state == "play":
             # Check to see if in multiplayer or local and handle events based on
@@ -271,9 +355,12 @@ class Game:
 
         # State for joining multiplayer game allowing user to input host IP address
         if self.state == "joining":
+            # Handle back button event
+            self.menu.handle_event(event)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_BACKSPACE:
                     self.join_ip = self.join_ip[:-1]
+                    self.menu.ip = self.join_ip
                 elif event.key == pygame.K_RETURN and self.join_ip:
                     # Send connect message to server to then receive player id 
                     # and the game state
@@ -283,6 +370,7 @@ class Game:
                     char = event.unicode
                     if char.isdigit() or char == ".":
                         self.join_ip += char
+                        self.menu.ip = self.join_ip
             # HUD has its own event handling for the pause button, so check it first
             self.hud.handle_event(event)
             if self.hud.pause_clicked:
@@ -293,6 +381,7 @@ class Game:
             # Forward interact keypresses to levers
             for lever in self.level.levers:
                 lever.handle_event(event, self.players)
+
 
     def update(self, dt: float) -> None:
         # Handle client-server communication in different states for multiplayer
@@ -320,7 +409,7 @@ class Game:
             self.client.menu = False
             self.paused = False
             pygame.mixer.music.play(-1)
-            self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+            self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select", self.collected_gems)
             self.menu_track = []
             self.state = "title_menu"
 
@@ -328,18 +417,26 @@ class Game:
         if self.paused:
             return
 
+
         if self._shake_trauma > 0:
             self._shake_trauma = max(0.0, self._shake_trauma - _SHAKE_DECAY * dt)
+
 
         if self.state == "title_menu":
             if self.menu.next_screen:
                 _level_map = {"game": 1, "game2": 2, "game3": 3, "game4": 4}
                 if self.menu.next_screen in _level_map:
                     self.current_level = _level_map[self.menu.next_screen]
+                    target = _level_map[self.menu.next_screen]
+                    # Defensive gate: level 4 stays locked until all 3 gems are collected
+                    if target == 4 and len(self.collected_gems) < 3:
+                        self.menu.next_screen = None
+                        return
+                    self.current_level = target
                     self.menu.next_screen = None
                     # check if self.client is active and send to server request to change level
                     if self.client:
-                        self.client.send("level_select", {"level": self.current_level})
+                        self.client.send("level_select", {"level": target})
                     else:
                         pygame.mixer.music.stop()  # stop menu music when game starts
                         self._restart()
@@ -347,21 +444,28 @@ class Game:
                 elif self.menu.next_screen == "back":
                     if self.menu_track:
                         previous = self.menu_track.pop()
-                        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, previous)
+                        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, previous, self.collected_gems)
 
                 # Initialize server and client with server IP for host if player 
                 # chooses to host
                 elif self.menu.next_screen == "host":
-                    self.server = Server(self.current_level, ip = self.join_ip)
+                    self.server = Server(self.current_level, ip=self.server_ip)
                     self.client = Client(self.server.ip)
                     self.client.send("connect", {})
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "host", self.collected_gems, ip=self.server.ip)
                     self.state = "hosting"
                 elif self.menu.next_screen == "join":
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "join", self.collected_gems)
                     self.join_ip = ""
                     self.state = "joining"
+                elif self.menu.next_screen == "back":
+                    if self.menu_track:
+                        previous = self.menu_track.pop()
+                        self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, previous, self.collected_gems)
                 else:
                     self.menu_track.append(self.menu.menu)
-                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, self.menu.next_screen)
+                    self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, self.menu.next_screen, self.collected_gems)
+
 
         # If hosting server waiting for second player to join and client
         # confirms connection
@@ -369,15 +473,33 @@ class Game:
         if self.state == "hosting":
             self.server.handle_connect()
             self.client.receive()
-            if len(self.server.players) == 2 and self.client.player_id is not None:
-                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
+            
+            # Check for back button and close server and remove server and client
+            if self.menu.next_screen == "back":
+                self.menu.next_screen = None
+                self.server.server.close()
+                self.server = None
+                self.client = None
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "multiplayer", self.collected_gems)
+                self.menu_track = ["title", "game_mode"]
+                self.state = "title_menu"
+            elif len(self.server.players) == 2 and self.client.player_id is not None:
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select", self.collected_gems)
                 self.menu_track = []
                 self.state = "title_menu"
 
         # Check to see if client has received game state
         # from the server to start game
         if self.state == "joining":
-            if self.client:
+            # Check for back button  
+            if self.menu.next_screen == "back":
+                self.menu.next_screen = None
+                self.client = None
+                self.join_ip = self.server_ip
+                self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "multiplayer", self.collected_gems)
+                self.menu_track = ["title", "game_mode"]
+                self.state = "title_menu"
+            elif self.client:
                 self.client.receive()
                 if self.client.player_id is not None:
                     self.menu = Menu(SCREEN_WIDTH, SCREEN_HEIGHT, "level_select")
@@ -400,6 +522,9 @@ class Game:
                             collectible.collect()
                             self.hud.notify_collected()
                             self.collect_sound.play()
+                            if self.current_level in (1, 2, 3):
+                                # Only gems from levels 1-3 count toward unlocking level 4
+                                self.collected_gems.add(collectible.kind)
 
                     if self.state == "play":
                         for hz in pygame.sprite.spritecollide(player, self.level.hazards, dokill=False):
@@ -427,6 +552,7 @@ class Game:
                 self.hud.update(dt)
 
                 self.players = [p for p in self.players if p.health > 0]
+
             # Multiplayer game update for game logic
             else:
                 # Get inputs and send them to server
@@ -501,6 +627,9 @@ class Game:
                                 collectible.collect()
                                 self.hud.notify_collected()
                                 self.collect_sound.play()
+                                if self.current_level in (1, 2, 3):
+                                    # Only gems from levels 1-3 count toward unlocking level 4
+                                    self.collected_gems.add(collectible.kind)
                     
                     # Update movable walls, levers, and buttons visually based on game state
                     # received from server by iterating through each interactable
@@ -541,10 +670,12 @@ class Game:
 
                 self.hud.update(dt)
 
+
     def draw(self) -> None:
         surf = self._render_surf
 
-        if self.state == "title_menu":
+
+        if self.state in ("title_menu", "hosting", "joining"):
             self.menu.draw(surf)
         elif self.state in ("play", "level_complete", "game_over"):
             surf.fill(pygame.Color("#474747"))
@@ -555,31 +686,25 @@ class Game:
             if self.paused:
                 self.pause_menu.draw(surf)
             if self.state == "level_complete":
-                font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("Level Complete!", True, pygame.Color("#FFD700"))
-                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
-                self.level_select_button.draw(surf)
+                # Cosmic purple panel with gold border, arcade pixel text
+                panel_rect = pygame.Rect(0, 0, 1000, 360)
+                panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                self._draw_end_panel(surf, panel_rect)
+                title_surf = self._arcade_text("LEVEL COMPLETE!", self._end_title_font, pygame.Color("#ffd95a"), scale=2)
+                surf.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 90)))
+                hint_surf = self._arcade_text("PRESS R TO RESTART", self._end_sub_font, pygame.Color("#e0d0ff"), scale=2)
+                surf.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 180)))
+                self._draw_arcade_button(surf, self.level_select_button, "Level Select")
             elif self.state == "game_over":
-                font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("You died! Press R to restart", True, pygame.Color("#FF4444"))
-                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
-
-        # hosting and joining screens 
-        elif self.state == "hosting":
-            surf.fill(pygame.Color("#A7A7A7"))
-            font = pygame.font.SysFont("Times New Roman", 48, True)
-            ip_msg = font.render(f"Your IP: {self.server.ip}", True, pygame.Color("#000000"))
-            msg = font.render("Hosting... Waiting for player to join.", True, pygame.Color("#000000"))
-            surf.blit(ip_msg, (SCREEN_WIDTH // 2 - ip_msg.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
-            surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
-        
-        elif self.state == "joining":
-            surf.fill(pygame.Color("#A7A7A7"))
-            font = pygame.font.SysFont("Times New Roman", 48, True)
-            msg = font.render("Enter Host IP: " + self.join_ip, True, pygame.Color("#000000"))
-            help = font.render("Press Enter to connect, Backspace to delete", True, pygame.Color("#000000"))
-            surf.blit(help, (SCREEN_WIDTH // 2 - help.get_width() // 2, SCREEN_HEIGHT // 2 - 60))
-            surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 24))
+                # Cosmic purple panel with gold border, arcade pixel text
+                panel_rect = pygame.Rect(0, 0, 800, 280)
+                panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                self._draw_end_panel(surf, panel_rect)
+                title_surf = self._arcade_text("YOU DIED!", self._end_title_font, pygame.Color("#ff6060"), scale=2)
+                surf.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 100)))
+                hint_surf = self._arcade_text("PRESS R TO RESTART", self._end_sub_font, pygame.Color("#e0d0ff"), scale=2)
+                surf.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 190)))
+            
         
         dx, dy = self._shake_offset()
         self.screen.fill(pygame.Color("#000000"))
