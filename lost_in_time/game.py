@@ -76,11 +76,16 @@ class Game:
                 player.JUMP_SPEED = 600.0
 
 
+        # Arcade-style level select button for the level complete screen
         self.level_select_button = Button(
             "Level Select",
-            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80),
-            400, 100, "#8DF78DFF"
+            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 120),
+            420, 90, "#2a1060"
         )
+
+        # Small bitmap fonts scaled up nearest-neighbor for arcade pixel look
+        self._end_title_font = pygame.font.Font(None, 40)
+        self._end_sub_font = pygame.font.Font(None, 22)
 
 
         self.hud = HUD(SCREEN_WIDTH, HUD_H)
@@ -105,6 +110,13 @@ class Game:
         self.collect_sound = pygame.mixer.Sound("assets/sounds/collect.mp3")
         # sound effect for player death
         self.death_sound = pygame.mixer.Sound("assets/sounds/death.mp3")
+
+
+    # render pixel-art arcade text by scaling up a small render nearest-neighbor
+    def _arcade_text(self, text: str, font: pygame.font.Font, color: pygame.Color, scale: int = 2) -> pygame.Surface:
+        small = font.render(text, False, color)
+        w, h = small.get_size()
+        return pygame.transform.scale(small, (w * scale, h * scale))
 
 
     def _add_trauma(self, amount: float) -> None:
@@ -213,6 +225,36 @@ class Game:
 
 
         pygame.mixer.stop()
+
+
+    # draw a themed panel with cosmic purple background and gold border (matches pause menu)
+    def _draw_end_panel(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
+        # Dim the gameplay behind the panel
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+        # Panel body + gold border
+        pygame.draw.rect(screen, pygame.Color("#2a1060"), rect, border_radius=16)
+        pygame.draw.rect(screen, pygame.Color("#ffd95a"), rect, width=3, border_radius=16)
+
+
+    # draw an arcade-styled button matching the rest of the menu style
+    def _draw_arcade_button(self, screen: pygame.Surface, button: Button, label: str) -> None:
+        rect = button.rect
+        hovered = rect.collidepoint(pygame.mouse.get_pos())
+
+        # Hover lifts the button slightly for feedback
+        draw_rect = rect.copy()
+        if hovered:
+            draw_rect.y -= 4
+
+        body_color = pygame.Color("#4a2890") if hovered else pygame.Color("#2a1060")
+        pygame.draw.rect(screen, body_color, draw_rect, border_radius=10)
+        pygame.draw.rect(screen, pygame.Color("#ffd95a"), draw_rect, width=3, border_radius=10)
+
+        # Button label in pixel-art arcade style
+        label_surf = self._arcade_text(label.upper(), self._end_sub_font, pygame.Color("#ffffff"), scale=2)
+        screen.blit(label_surf, label_surf.get_rect(center=draw_rect.center))
 
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -377,14 +419,24 @@ class Game:
             if self.paused:
                 self.pause_menu.draw(surf)
             if self.state == "level_complete":
-                font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("Level Complete!", True, pygame.Color("#FFD700"))
-                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
-                self.level_select_button.draw(surf)
+                # Cosmic purple panel with gold border, arcade pixel text
+                panel_rect = pygame.Rect(0, 0, 1000, 360)
+                panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                self._draw_end_panel(surf, panel_rect)
+                title_surf = self._arcade_text("LEVEL COMPLETE!", self._end_title_font, pygame.Color("#ffd95a"), scale=2)
+                surf.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 90)))
+                hint_surf = self._arcade_text("PRESS R TO RESTART", self._end_sub_font, pygame.Color("#e0d0ff"), scale=2)
+                surf.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 180)))
+                self._draw_arcade_button(surf, self.level_select_button, "Level Select")
             elif self.state == "game_over":
-                font = pygame.font.SysFont("Arial", 72, True)
-                msg = font.render("You died! Press R to restart", True, pygame.Color("#FF4444"))
-                surf.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, SCREEN_HEIGHT // 2 - 36))
+                # Cosmic purple panel with gold border, arcade pixel text
+                panel_rect = pygame.Rect(0, 0, 800, 280)
+                panel_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                self._draw_end_panel(surf, panel_rect)
+                title_surf = self._arcade_text("YOU DIED!", self._end_title_font, pygame.Color("#ff6060"), scale=2)
+                surf.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 100)))
+                hint_surf = self._arcade_text("PRESS R TO RESTART", self._end_sub_font, pygame.Color("#e0d0ff"), scale=2)
+                surf.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_rect.top + 190)))
 
 
         dx, dy = self._shake_offset()
