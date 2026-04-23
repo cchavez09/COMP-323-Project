@@ -55,13 +55,14 @@ class Menu:
                     self.next_screen = "game2"
                 if button.text == "3":
                     self.next_screen = "game3"
+                if button.text == "4":
+                    self.next_screen = "game4"
                 if button.text == "Multiplayer":
                     self.next_screen = "multiplayer"
                 if button.text == "Host":
                     self.next_screen = "host"
                 if button.text == "Join":
                     self.next_screen = "join"
-                
                     
     # draw background 
     def draw(self, screen: pygame.Surface) -> None:

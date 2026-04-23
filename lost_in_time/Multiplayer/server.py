@@ -5,10 +5,7 @@ import pygame
 from lost_in_time.player import Player
 from lost_in_time.level import Level
 
-host = socket.gethostname()
-IPAddr = socket.gethostbyname(host)
 port = 5555
-
 
 # Server is authoritative so it handles game logic and send updates to clients
 # based on inputs from clients
@@ -43,8 +40,6 @@ class Server:
             Player(self.level.playfield.left  + 20, self.level.playfield.bottom - 20, self.temp),
             Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, self.temp),
         ]
-        self.bodies[0].color = pygame.Color("#FF0000")
-        self.bodies[1].color = pygame.Color("#0000FF")
 
         self.paused = False
 
@@ -84,6 +79,8 @@ class Server:
 
         elif type == "restart" and addr in self.players:
             self._restart()
+            for addr in self.players:
+                self.send("level_select", {"level": self.current_level}, addr)
 
         # Handle interactions with levers
         elif type == "interact" and addr in self.players:
@@ -97,15 +94,31 @@ class Server:
             for addr in self.players:
                 self.send("pause", {"pause": self.paused}, addr)
 
+        # Handle menu navigation to correctly display level select
+        elif type == "menu" and addr in self.players:
+            for addr in self.players:
+                self.send("menu", {}, addr)
+
+        # Handle correct level build depending on what level players choose
+        elif type == "level_select" and addr in self.players:
+            level = data.get("level")
+            if level in (1, 2, 3, 4):
+                self.current_level = level
+                self._restart()
+                for addr in self.players:
+                    self.send("level_select", {"level": level}, addr)
+
      # Restart resets the level and both players without quitting
     def _restart(self) -> None:
-        self.level = Level(1, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
+        self.level = Level(self.current_level, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, HUD_H)
         self.bodies = [
-            Player(self.level.playfield.left + 20, self.level.playfield.bottom - 20, self.temp),
-            Player(self.level.playfield.right - 20, self.level.playfield.bottom - 20, self.temp)
+            Player(*self.level.spawn_p1, self.temp),
+            Player(*self.level.spawn_p2, self.temp)
         ]
-        self.bodies[0].color = pygame.Color("#FF0000")
-        self.bodies[1].color = pygame.Color("#0000FF")
+        if self.current_level == 4:
+            for body in self.bodies:
+                body.GRAVITY = 600.0
+                body.JUMP_SPEED = 600.0
                 
     # Update game state through server rather than game.py since server is authoritative
     def update(self, dt):
@@ -125,6 +138,8 @@ class Server:
             for collectible in self.level.collectibles:
                 if collectible.active and body.rect.colliderect(collectible.rect):
                     collectible.active = False
+        
+        self.level.hazards.update(dt)
 
         for lever in self.level.levers:
             lever.update(dt)
@@ -134,20 +149,28 @@ class Server:
 
         if self.level.exit_door:
             self.level.exit_door.update(self.bodies)
-
+        
     def broadcast(self) -> None:
         # Allow clients to see the game state by sending state to clients after each update
         state = {
             "players": [
-                {"x": self.bodies[0].rect.centerx, "y": self.bodies[0].rect.centery, "health": self.bodies[0].health},
-                {"x": self.bodies[1].rect.centerx, "y": self.bodies[1].rect.centery, "health": self.bodies[1].health},
+                {"x": self.bodies[0].rect.centerx, "y": self.bodies[0].rect.centery, 
+                 "vel_x": self.bodies[0].velocity.x, "on_ground": self.bodies[0].on_ground, 
+                 "facing_left": self.bodies[0].facing_left, "health": self.bodies[0].health},
+                {"x": self.bodies[1].rect.centerx, "y": self.bodies[1].rect.centery, 
+                 "vel_x": self.bodies[1].velocity.x, "on_ground": self.bodies[1].on_ground, 
+                 "facing_left": self.bodies[1].facing_left, "health": self.bodies[1].health},
             ],
             "collectibles": [collectible.active for collectible in self.level.collectibles],
             "movable_walls": [walls.active for walls in self.level.movable_walls],
             "door_completed": self.level.exit_door.completed,
             "door_p1_touching": self.level.exit_door.p1_touching,
             "door_p2_touching": self.level.exit_door.p2_touching,
-            "pause": False
+            "lever_activated": [lever.activated for lever in self.level.levers],
+            "pressure_buttons": [btn.pressed for btn in self.level.pressure_buttons],
+            "hazards": [
+                {"hz_x": hz.rect.x, "hz_y": hz.rect.y,} for hz in self.level.hazards
+            ]
         }
         for addr in self.players:
             self.send("state", state, addr)

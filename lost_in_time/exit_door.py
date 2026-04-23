@@ -5,22 +5,40 @@ class ExitDoor:
     WIDTH = 50
     HEIGHT = 80
 
-    COLOR_INACTIVE = pygame.Color("#5A3E2B")   # dark brown - waiting for players
-    COLOR_PARTIAL  = pygame.Color("#C8A84B")   # gold - one player touching
-    COLOR_COMPLETE = pygame.Color("#00FF88")   # green - both players touching
+    # 4 frames, ~0.4s per full cycle
+    FRAME_COUNT = 4
+    FRAME_MS = 100   # 100ms per frame = 400ms total cycle
+
+    # cached spritesheet, loaded once
+    _frames = None
+
+    @classmethod
+    def _load_frames(cls) -> list:
+        if cls._frames is not None:
+            return cls._frames
+        sheet = pygame.image.load("assets/sprites/portal.png").convert_alpha()
+        frame_w = sheet.get_width() // cls.FRAME_COUNT
+        frame_h = sheet.get_height()
+        # scale each frame so the portal is roughly 1.4x the collision box
+        target_h = int(cls.HEIGHT * 1.4)
+        target_w = int(frame_w * (target_h / frame_h))
+        cls._frames = []
+        for i in range(cls.FRAME_COUNT):
+            frame = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+            frame.blit(sheet, (0, 0), (i * frame_w, 0, frame_w, frame_h))
+            frame = pygame.transform.scale(frame, (target_w, target_h))
+            cls._frames.append(frame)
+        return cls._frames
 
     def __init__(self, x: int, y: int) -> None:
-        # x, y = midbottom of the door
         self.rect = pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)
         self.rect.midbottom = (x, y)
 
         self.p1_touching = False
         self.p2_touching = False
-        # Set to True when both players are on the door simultaneously
         self.completed = False
 
     def update(self, players: list) -> None:
-        # Reset touch state each frame
         self.p1_touching = False
         self.p2_touching = False
 
@@ -35,30 +53,36 @@ class ExitDoor:
             self.completed = True
 
     def draw(self, screen: pygame.Surface) -> None:
-        # Choose color based on how many players are touching
+        frames = self._load_frames()
+        # pick frame based on elapsed time
+        frame_idx = (pygame.time.get_ticks() // self.FRAME_MS) % self.FRAME_COUNT
+        sprite = frames[frame_idx]
+
+        # tint the portal based on touch state: inactive = dim, partial = normal, complete = bright
         touching_count = self.p1_touching + self.p2_touching
         if touching_count == 2:
-            color = self.COLOR_COMPLETE
-        elif touching_count == 1:
-            color = self.COLOR_PARTIAL
-        else:
-            color = self.COLOR_INACTIVE
+            tinted = sprite.copy()
+            # bright green glow overlay when complete
+            glow = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            glow.fill((100, 255, 160, 80))
+            tinted.blit(glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            sprite = tinted
+        elif touching_count == 0:
+            # darken when no players near
+            tinted = sprite.copy()
+            dark = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            dark.fill((0, 0, 0, 90))
+            tinted.blit(dark, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
+            sprite = tinted
 
-        pygame.draw.rect(screen, color, self.rect)
+        # center sprite on collision rect's midbottom so it stands on the same ground
+        draw_rect = sprite.get_rect(midbottom=self.rect.midbottom)
+        screen.blit(sprite, draw_rect)
 
-        # Door frame
-        pygame.draw.rect(screen, pygame.Color("#000000"), self.rect, 3)
-
-        # Door knob
-        knob_x = self.rect.right - 10
-        knob_y = self.rect.centery
-        pygame.draw.circle(screen, pygame.Color("#FFD700"), (knob_x, knob_y), 5)
-
-        # Label showing how many players still need to touch
         font = pygame.font.SysFont("Arial", 14, True)
         if not self.completed:
             needed = 2 - touching_count
             label = font.render(f"Need {needed} more", True, pygame.Color("#FFFFFF"))
         else:
-            label = font.render("EXIT!", True, pygame.Color("#000000"))
-        screen.blit(label, (self.rect.centerx - label.get_width() // 2, self.rect.top - 20))
+            label = font.render("EXIT!", True, pygame.Color("#FFFF00"))
+        screen.blit(label, (self.rect.centerx - label.get_width() // 2, draw_rect.top - 20))

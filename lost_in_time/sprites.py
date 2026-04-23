@@ -399,6 +399,75 @@ def get_sprite(kind: str, state: str, frame_index: int, facing_left: bool) -> py
 _BG_CACHE = {}
 
 
+def _bg_space(w: int, h: int) -> pygame.Surface:
+    surf = pygame.Surface((w, h))
+
+    # Deep space gradient: near-black at top fading to slightly warmer dark at bottom
+    for y in range(h):
+        t = y / h
+        pygame.draw.line(surf, (int(t * 8), int(t * 5), int(15 + t * 20)), (0, y), (w, y))
+
+    # Stars — fixed seed for determinism
+    rng = random.Random(99)
+    for _ in range(500):
+        sx = rng.randint(0, w - 1)
+        sy = rng.randint(0, h - 1)
+        br = rng.randint(140, 255)
+        tint = rng.choice([
+            (br, br, br),
+            (br, br - 15, br - 30),
+            (br - 30, br - 15, br),
+        ])
+        if rng.random() < 0.12:
+            pygame.draw.circle(surf, tint, (sx, sy), 2)
+        else:
+            surf.set_at((sx, sy), tint)
+
+    # Nebula cloud (semi-transparent blobs blit onto surface)
+    neb = pygame.Surface((360, 240), pygame.SRCALPHA)
+    for cx, cy, r, col in [
+        (180, 120, 100, (70, 10, 110, 25)),
+        (150, 100,  70, (30,  8,  80, 18)),
+        (200, 140,  60, (15, 30,  90, 18)),
+        (170,  80,  45, (90, 20, 140, 15)),
+    ]:
+        pygame.draw.circle(neb, col, (cx, cy), r)
+    surf.blit(neb, (w - 420, 40))
+
+    # Planet (upper-right quadrant)
+    px, py, pr = w - 240, 190, 85
+    for ri in range(pr, 0, -1):
+        t = 1 - ri / pr
+        surf.set_at  # avoid unused-import warning
+        pygame.draw.circle(surf, (int(30 + t * 50), int(60 + t * 90), int(120 + t * 80)), (px, py), ri)
+    # Ring
+    pygame.draw.ellipse(surf, (170, 150, 90), (px - 130, py - 22, 260, 44), 4)
+    pygame.draw.ellipse(surf, (120, 100, 65), (px - 108, py - 16, 216, 32), 2)
+    # Surface markings
+    pygame.draw.circle(surf, (40, 75, 155), (px - 22, py - 18), 14)
+    pygame.draw.circle(surf, (25, 55, 120), (px + 30, py + 12), 10)
+    pygame.draw.circle(surf, (50, 90, 165), (px - 8, py + 24), 7)
+
+    # Small moon
+    mx, my = w - 490, 115
+    pygame.draw.circle(surf, (155, 155, 165), (mx, my), 32)
+    pygame.draw.circle(surf, (135, 135, 145), (mx, my), 32, 2)
+    pygame.draw.circle(surf, (120, 120, 130), (mx - 11, my - 6), 9)
+    pygame.draw.circle(surf, (120, 120, 130), (mx + 13, my + 9), 6)
+
+    # Distant space-station silhouette (bottom-left)
+    sc = (12, 16, 30)
+    sx2, sy2 = 210, h - 190
+    pygame.draw.rect(surf, sc, (sx2 - 110, sy2 - 12, 220, 24))   # main hull
+    pygame.draw.rect(surf, sc, (sx2 - 85,  sy2 - 55, 22,  75))   # solar panel L
+    pygame.draw.rect(surf, sc, (sx2 + 63,  sy2 - 55, 22,  75))   # solar panel R
+    pygame.draw.rect(surf, sc, (sx2 - 70,  sy2 - 55, 140, 8))    # panel crossbar L
+    pygame.draw.rect(surf, sc, (sx2 - 70,  sy2 + 18, 140, 8))    # panel crossbar R
+    pygame.draw.circle(surf, sc, (sx2, sy2), 22)                  # central module
+
+    return surf
+
+
 def _bg_modern(w: int, h: int) -> pygame.Surface:
     surf = pygame.Surface((w, h))
     # Sky gradient: purple to orange horizon
@@ -579,6 +648,8 @@ def get_background(level_number: int, w: int, h: int) -> pygame.Surface:
         bg = _bg_wildwest(w, h)
     elif level_number == 3:
         bg = _bg_colosseum(w, h)
+    elif level_number == 4:
+        bg = _bg_space(w, h)
     else:
         bg = pygame.Surface((w, h))
         bg.fill(pygame.Color("#474747"))
@@ -605,6 +676,12 @@ _LEVEL_THEME = {
         "body":   pygame.Color("#b8a886"),
         "edge":   pygame.Color("#6a5b40"),
         "accent": pygame.Color("#f8f0d8"),
+    },
+    4: {   # Space station (dark steel + neon)
+        "top":    pygame.Color("#00bbee"),
+        "body":   pygame.Color("#141830"),
+        "edge":   pygame.Color("#050810"),
+        "accent": pygame.Color("#0077cc"),
     },
 }
 
@@ -646,6 +723,15 @@ def draw_themed_platform(screen: pygame.Surface, rect: pygame.Rect, level_number
                              (x, rect.y + 3), (x, rect.bottom - 2), 1)
         pygame.draw.line(screen, theme["accent"],
                          (rect.x + 2, rect.y + 1), (rect.right - 3, rect.y + 1), 1)
+    elif level_number == 4:
+        # tech panel seams + glowing neon top trim
+        for x in range(rect.x + 50, rect.right - 5, 50):
+            pygame.draw.line(screen, theme["edge"],
+                             (x, rect.y + 2), (x, rect.bottom - 2), 1)
+        pygame.draw.line(screen, theme["accent"],
+                         (rect.x + 2, rect.y + 1), (rect.right - 3, rect.y + 1), 2)
+        pygame.draw.line(screen, theme["top"],
+                         (rect.x + 2, rect.y + 3), (rect.right - 3, rect.y + 3), 1)
 
 
 # Draw a movable wall with hatching so it reads as a special wall
@@ -669,6 +755,9 @@ def draw_themed_hazard(screen: pygame.Surface, hazard, level_number: int) -> boo
         return True
     elif level_number == 3:
         _draw_lion_hazard(screen, hazard)
+        return True
+    elif level_number == 4:
+        _draw_asteroid_hazard(screen, hazard)
         return True
     return False
 
@@ -773,3 +862,45 @@ def _draw_lion_hazard(screen: pygame.Surface, hazard) -> None:
         pygame.draw.line(screen, fur_d,
                          (bx + cw - 3, by + ch - 8),
                          (bx + cw + 2, by + ch - 12), 2)
+
+
+# Space hazard: tumbling asteroids with a danger glow
+def _draw_asteroid_hazard(screen: pygame.Surface, hazard) -> None:
+    rock_mid   = pygame.Color("#504540")
+    rock_dark  = pygame.Color("#282018")
+    rock_light = pygame.Color("#706560")
+    glow       = pygame.Color("#ff5522")
+
+    for i in range(hazard.count):
+        bx = hazard.rect.x + i * hazard.spike_w
+        by = hazard.rect.y
+        cw = hazard.spike_w
+        ch = hazard.spike_h
+        cx = bx + cw // 2
+        cy = by + ch // 2 + 3
+        r  = min(cw, ch) // 2 - 3
+
+        # Irregular rocky outline (offset polygon)
+        pts = [
+            (cx - r + 1, by + 3),
+            (cx + r - 2, by + 2),
+            (cx + r,     cy - 2),
+            (cx + r - 1, cy + r - 1),
+            (cx + 2,     by + ch - 2),
+            (cx - r + 3, by + ch - 3),
+            (cx - r,     cy + 2),
+            (cx - r + 1, cy - r + 2),
+        ]
+        pygame.draw.polygon(screen, rock_mid, pts)
+        pygame.draw.polygon(screen, rock_dark, pts, 2)
+
+        # Surface craters
+        pygame.draw.circle(screen, rock_dark,  (cx - r // 3, cy - r // 3), max(2, r // 3))
+        pygame.draw.circle(screen, rock_light, (cx + r // 4, cy + r // 4), max(1, r // 4))
+
+        # Danger glow ring
+        pygame.draw.circle(screen, glow, (cx, cy), r + 2, 1)
+
+        # Small trailing debris chips
+        pygame.draw.circle(screen, rock_mid, (cx - r - 3, cy - 1), 2)
+        pygame.draw.circle(screen, rock_mid, (cx + r + 2, cy + 2), 1)
